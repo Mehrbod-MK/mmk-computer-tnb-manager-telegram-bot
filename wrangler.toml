@@ -1,8 +1,0 @@
-name = "mmk-computer-tnb-manager-telegram-bot"
-main = "src/index.js"
-compatibility_date = "2024-09-09"
-workers_dev = true
-
-[vars]
-API_KEY = "7377397628:AAFNmab7t3Aqdv-o77rKMYTdyie7o_D9gCw"
-CREATOR_CHAT_ID = "146995203"
