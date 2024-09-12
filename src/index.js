@@ -243,6 +243,12 @@ async function Route_PrivateChat_IsCreator(message)
 
 async function Route_PrivateChat_NonRegisteredUser(message)
 {
+  // Check if user is not the creator himself.
+  if(IsCreator(message.from.id) === false)
+  {
+    return false
+  }
+
   // Check if this is not a registered user.
   if(users.indexOf(message.from.id) == -1)
   {
