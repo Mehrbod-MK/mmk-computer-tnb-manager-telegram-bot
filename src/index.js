@@ -112,6 +112,10 @@ async function handleRequest(request)
     
   }
 
+  // Prompt bad input command if all routings fail.
+  await Prompt_BadInputCommand(message)
+  return true
+
   return new Response("OK")
 }
 
@@ -160,21 +164,11 @@ async function Route_MacroCommand(message)
           switch(creator_State)
           {
             case STATE_USER_INITIAL:
-              let text_CreatorMenu = "👈 مهربد ملاکاظمی خوبده گرامی، به سامانه خوش آمدید."
-              let replyMarkup_CreatorMenu = 
-              {
-                keyboard: [
-                  [{ text: '📢 تنظیم کانال اطلاع‌رسانی' }],
-                  [{ text: '🤖 درباره بات' }]
-                ],
-                resize_keyboard: true,
-                one_time_keyboard: true,
-                input_field_placeholder: "پنل سازنده",
-                is_persistent: true
-              }
-          
-              await Send_TextMessage(message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
-          
+              await Prompt_Creator_MainMenu(message)
+              return true
+
+            case STATE_CREATOR_SETTING_CHANNEL:
+              await Prompt_Creator_SetChannel(message)
               return true
           }
         }
@@ -210,10 +204,37 @@ async function Route_PrivateChat_IsCreator(message)
 
           return true
         }
+        
+        break
 
-        // Prompt bad input command.
-        await Prompt_BadInputCommand(message)
+      // Creator -> Setting Announcement Channel.
+      case STATE_CREATOR_SETTING_CHANNEL:
+
+        // Remove Current Channel.
+        if(message.text === "❌ حذف کانال تنظیم شده فعلی در صورت وجود")
+        {
+
+          return true
+        }
+
+        // Go back to previous menu.
+        if(message.text === "🔙 بازگشت به منوی قبلی")
+        {
+
+          return true
+        }
+
+        // Otherwise, treat input text as Channel ID.
+        announcement_Channel_ID = +message.text
+        await Prompt_SetAnnouncementChannel(message, announcement_Channel_ID)
+
+        // Automatically return to main menu.
+        creator_State = STATE_USER_INITIAL
+        await Prompt_Creator_MainMenu(message)
+
         return true
+
+        break
     }
   }
 
@@ -266,11 +287,42 @@ async function Prompt_BadInputCommand(message)
 
 async function Prompt_Creator_SetChannel(message)
 {
-  let promptText_SetChannel = `👈 تنظیم کانال اطلاع‌رسانی بات
+  let promptText_SetChannel = `<b>👈 تنظیم کانال اطلاع‌رسانی بات</b>
   
-  ${announcement_Channel_ID === null ? `🔵 کانالی تنظیم نشده است.` : `🟢 شماره چت کانال:  ${announcement_Channel_ID}`}
+  ${announcement_Channel_ID === null ? `🔵 کانالی تنظیم نشده است.` : `🟢 شماره چت کانال:  <code>${announcement_Channel_ID}</code>`}
   
   👇 حال، می‌توانید با وارد کردن شماره چت کانال جدید، آن را جهت اطلاع رسانی بات تنظیم کنید.`
 
-  await Send_TextMessage(message.chat.id, promptText_SetChannel, {remove_keyboard: true})
+  await Send_TextMessage(message.chat.id, promptText_SetChannel, { keyboard: [[{ text: "❌ حذف کانال تنظیم شده فعلی در صورت وجود" }], [{text: "🔙 بازگشت به منوی قبلی"}]]})
+}
+
+async function Prompt_SetAnnouncementChannel(message, newChannelID)
+{
+  let prompt_SetChannelID = `✅ کانال اطلاع‌رسانی با موفقیت به شماره 
+  <code>${newChannelID}</code>
+  تنظیم شد.
+  
+  👈 می‌توانید با استفاده از دستور /test_channel، یک پیام آزمایشی به کانال تنظیم شده توسط بات ارسال کنید.
+  
+  <i><b>⚠ در صورت بروز هر گونه اشکال، می‌توانید از دستور /help استفاده کنید.</b></i>`
+
+  await Send_TextMessage(message.chat.id, prompt_SetChannelID, { remove_keyboard: true })
+}
+
+async function Prompt_Creator_MainMenu(message)
+{
+  let text_CreatorMenu = "👈 مهربد ملاکاظمی خوبده گرامی، به سامانه خوش آمدید."
+  let replyMarkup_CreatorMenu = 
+  {
+    keyboard: [
+                [{ text: '📢 تنظیم کانال اطلاع‌رسانی' }],
+                  [{ text: '🤖 درباره بات' }]
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: true,
+                input_field_placeholder: "پنل سازنده",
+                is_persistent: true
+              }
+          
+    await Send_TextMessage(message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
 }
