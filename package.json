@@ -8,6 +8,7 @@
     "start": "wrangler dev"
   },
   "devDependencies": {
+    "persian-date": "^1.1.0",
     "wrangler": "^3.60.3"
   }
 }

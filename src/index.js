@@ -135,7 +135,6 @@ async function Route_MacroCommand(message)
     }
 
     // /mmk_comptnb_getUserId
-
     if(loweredText === "/mmk_comptnb_getuserid")
     {
       if("from" in message)
