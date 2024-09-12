@@ -109,12 +109,12 @@ async function handleRequest(request)
         return new Response("OK")
       }
     }
+   
     
-  }
-
   // Prompt bad input command if all routings fail.
-  await Prompt_BadInputCommand(message)
-  return true
+  await Prompt_BadInputCommand(payload.message)
+
+  }
 
   return new Response("OK")
 }
@@ -244,7 +244,7 @@ async function Route_PrivateChat_IsCreator(message)
 async function Route_PrivateChat_NonRegisteredUser(message)
 {
   // Check if user is not the creator himself.
-  if(IsCreator(message.from.id) === false)
+  if(await IsCreator(message.from.id) === true)
   {
     return false
   }
