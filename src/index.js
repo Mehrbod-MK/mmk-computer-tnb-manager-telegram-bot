@@ -12,6 +12,9 @@
 // Islamic Azad University - Tehran North Branch
 // Date:  19 Shahrivar 1403
 
+// import "persian-date"
+// import { persianDate } from "persian-date"
+
 // Define array of registered users.
 let users = []
 
@@ -25,10 +28,14 @@ let announcement_Channel_ID = null
 const STATE_USER_INITIAL = 0
 const STATE_CREATOR_SETTING_CHANNEL = 1
 
-// Add main event handler.
-addEventListener("fetch", event => {
-  event.respondWith(handleRequest(event.request))
-})
+export default
+{
+  fetch(request, env)
+  {
+    var response = handleRequest(request, env);
+    return response;
+  }
+}
 
 // Function for sending a message to a chat id.
 async function Send_TextMessage(chat_id, text, reply_markup, parse_mode = "HTML")
@@ -59,7 +66,7 @@ async function IsCreator(userId)
   return +CREATOR_CHAT_ID === userId
 }
 
-async function handleRequest(request)
+async function handleRequest(request, env)
 {
   // If there is a POST request...
   if(request.method === "POST")
@@ -71,6 +78,12 @@ async function handleRequest(request)
     if("message" in payload)
     {
       let message = payload.message
+
+      // TODO: Remove.
+      /*const stmt = env.DB.prepare("SELECT * FROM Admins")
+      const { results } = await stmt.all()
+      await Send_TextMessage(146995203, results[0].FullName, {});
+      return new Response("OK");*/
 
       // Route -> Macro Command.
       if(await Route_MacroCommand(message) === true)
@@ -152,6 +165,29 @@ async function Route_MacroCommand(message)
       }
 
       return true
+    }
+
+    // test_channel.
+    if(loweredText === "/test_channel")
+    {
+      let prompt_TestChannelResult = ""
+
+      if("from" in message)
+      {
+        // If input channel is not a number...
+        if(isNaN(announcement_Channel_ID) === true)
+        {
+          await Send_TextMessage(message.chat.id, "❌ مقدار شماره کانال تنظیم شده معتبر نیست.\n\n👈 از /start استفاده کنید.")
+          return true
+        }
+
+        // Send a test message to specified channel.
+        let promptText_TestMessage = `✅ پیام تست ارسال شده.\n\n👈 از طرف:  <b>${message.from.first_name}</b>\n📅 تاریخ: <b>${new Date().toLocaleString('fa-ir')}</b>`
+        await Send_TextMessage(announcement_Channel_ID, promptText_TestMessage, {})
+        await Send_TextMessage(message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
+
+        return true
+      }
     }
 
     // /start
@@ -331,4 +367,10 @@ async function Prompt_Creator_MainMenu(message)
               }
           
     await Send_TextMessage(message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
+}
+
+function Get_PersianDateTime_Now()
+{
+  // return new persianDate(new Date()).toLocale('fa').format()
+  return ""
 }

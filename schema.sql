@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS Admins;
+CREATE TABLE IF NOT EXISTS Admins
+(
+    ChatID BIGINT PRIMARY KEY NOT NULL,
+    FullName NVARCHAR(100) NOT NULL,
+
+    Can_SetChannel BOOLEAN NOT NULL
+);
+
+/* DEFAULT CREATOR -> Mehrbod Molla Kazemi */
+INSERT INTO Admins VALUES
+(146995203, "Mehrbod Molla Kazemi", TRUE);
