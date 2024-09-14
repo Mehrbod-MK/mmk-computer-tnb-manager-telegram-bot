@@ -18,12 +18,6 @@
 // Define array of registered users.
 let users = []
 
-// Creator -> Current State.
-let creator_State = 0
-
-// Announcement Channel ID.
-let announcement_Channel_ID = null
-
 // STATE DEFINITIONS.
 const STATE_USER_INITIAL = 0
 const STATE_CREATOR_SETTING_CHANNEL = 1
@@ -94,6 +88,33 @@ async function DB_Set_Admin_State(env, adminChatId, newState)
   await stmt.run()
 }
 
+async function DB_Delete_AnnouncementChannel(env)
+{
+  const stmt = env.DB.prepare("DELETE FROM Channels")
+  await stmt.run()
+}
+
+async function DB_Set_AnnouncementChannel(env, newChannelId)
+{
+  await DB_Delete_AnnouncementChannel(env)
+
+  const stmt = env.DB.prepare("INSERT INTO Channels VALUES(?)").bind(newChannelId)
+  await stmt.run()
+}
+
+async function DB_Get_AnnouncementChannel(env)
+{
+  const stmt = env.DB.prepare("SELECT * FROM Channels LIMIT 1")
+  const { results } = await stmt.all()
+
+  if(results.length != 1)
+  {
+    return NaN
+  }
+
+  return results[0].ChannelID
+}
+
 async function handleRequest(request, env)
 {
   // If there is a POST request...
@@ -106,15 +127,6 @@ async function handleRequest(request, env)
     if("message" in payload)
     {
       let message = payload.message
-
-      // TODO: Remove.
-      /*const stmt = env.DB.prepare("SELECT * FROM Admins")
-      const { results } = await stmt.all()
-      for(let x = 0; x < results.length; x++)
-      {
-        await Send_TextMessage(146995203, results[x].FullName, {});
-      }
-      return new Response("OK");*/
 
       // Route -> Macro Command.
       if(await Route_MacroCommand(env, message) === true)
@@ -205,8 +217,10 @@ async function Route_MacroCommand(env, message)
 
       if("from" in message)
       {
+        let channelID = await DB_Get_AnnouncementChannel(env)
+
         // If input channel is not a number...
-        if(isNaN(announcement_Channel_ID) === true)
+        if(isNaN(channelID) === true)
         {
           await Send_TextMessage(env, message.chat.id, "❌ مقدار شماره کانال تنظیم شده معتبر نیست.\n\n👈 از /start استفاده کنید.")
           return true
@@ -214,7 +228,7 @@ async function Route_MacroCommand(env, message)
 
         // Send a test message to specified channel.
         let promptText_TestMessage = `✅ پیام تست ارسال شده.\n\n👈 از طرف:  <b>${message.from.first_name}</b>\n📅 تاریخ: <b>${new Date().toLocaleString('fa-ir')}</b>`
-        await Send_TextMessage(env, announcement_Channel_ID, promptText_TestMessage, {})
+        await Send_TextMessage(env, channelID, promptText_TestMessage, {})
         await Send_TextMessage(env, message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
 
         return true
@@ -285,6 +299,10 @@ async function Route_PrivateChat_IsCreator(env, message)
         // Remove Current Channel.
         if(message.text === "❌ حذف کانال تنظیم شده فعلی در صورت وجود")
         {
+          // Delete channel, then re-prompt.
+          await DB_Delete_AnnouncementChannel(env)
+          await Prompt_RemovedAnnouncementChannelID(env, message)
+          await Prompt_Creator_SetChannel(env, message)
 
           return true
         }
@@ -292,16 +310,17 @@ async function Route_PrivateChat_IsCreator(env, message)
         // Go back to previous menu.
         if(message.text === "🔙 بازگشت به منوی قبلی")
         {
+          await DB_Set_Admin_State(env, message.from.id, STATE_USER_INITIAL)
+          await Prompt_Creator_MainMenu(env, message)
 
           return true
         }
 
         // Otherwise, treat input text as Channel ID.
-        announcement_Channel_ID = +message.text
-        await Prompt_SetAnnouncementChannel(env, message, announcement_Channel_ID)
+        await DB_Set_AnnouncementChannel(env, +message.text)
+        await Prompt_SetAnnouncementChannel(env, message, +message.text)
 
         // Automatically return to main menu.
-        // creator_State = STATE_USER_INITIAL
         await DB_Set_Admin_State(env, message.from.id, STATE_USER_INITIAL)
         await Prompt_Creator_MainMenu(env, message)
 
@@ -366,9 +385,11 @@ async function Prompt_BadInputCommand(env, message)
 
 async function Prompt_Creator_SetChannel(env, message)
 {
+  let channelID = await DB_Get_AnnouncementChannel(env)
+
   let promptText_SetChannel = `<b>👈 تنظیم کانال اطلاع‌رسانی بات</b>
-  
-  ${announcement_Channel_ID === null ? `🔵 کانالی تنظیم نشده است.` : `🟢 شماره چت کانال:  <code>${announcement_Channel_ID}</code>`}
+
+  ${(channelID === null || isNaN(channelID) === true) ? `🔵 کانالی تنظیم نشده است.` : `🟢 شماره چت کانال:  <code>${channelID}</code>`}
   
   👇 حال، می‌توانید با وارد کردن شماره چت کانال جدید، آن را جهت اطلاع رسانی بات تنظیم کنید.`
 
@@ -406,8 +427,9 @@ async function Prompt_Creator_MainMenu(env, message)
     await Send_TextMessage(env, message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
 }
 
-function Get_PersianDateTime_Now()
+async function Prompt_RemovedAnnouncementChannelID(env, message)
 {
-  // return new persianDate(new Date()).toLocale('fa').format()
-  return ""
+  let promptText_RemovedChannel = `☑ کانال با موفقیت حذف شد.`
+
+  await Send_TextMessage(env, message.chat.id, promptText_RemovedChannel, {})
 }
