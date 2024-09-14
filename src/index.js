@@ -42,7 +42,7 @@ export default
 }
 
 // Function for sending a message to a chat id.
-async function Send_TextMessage(chat_id, text, reply_markup, parse_mode = "HTML")
+async function Send_TextMessage(env, chat_id, text, reply_markup, parse_mode = "HTML")
 {
   let messageJSON = 
   {
@@ -64,10 +64,38 @@ async function Send_TextMessage(chat_id, text, reply_markup, parse_mode = "HTML"
     }).then(resp => resp.json())
 }
 
-// Function for checking creator privileges.
-async function IsCreator(userId)
+// Function for checking admin privileges.
+async function IsAdmin(env, userId)
 {
-  return +CREATOR_CHAT_ID === userId
+  const stmt = env.DB.prepare("SELECT * FROM Admins")
+  const { results } = await stmt.all()
+  for(let a = 0; a < results.length; a++)
+  {
+    if(results[a].ChatID === userId)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function DB_Get_Admin_State(env, adminChatId)
+{
+  const stmt = env.DB.prepare("SELECT * FROM Admins WHERE ChatID = ?").bind(adminChatId)
+  const { results } = await stmt.all()
+  if(results.length != 1)
+  {
+    return -1
+  }
+
+  return results[0].UserState
+}
+
+async function DB_Set_Admin_State(env, adminChatId, newState)
+{
+  const stmt = env.DB.prepare("UPDATE Admins SET UserState = ? WHERE ChatID = ?").bind(newState, adminChatId)
+  await stmt.run()
 }
 
 async function handleRequest(request, env)
@@ -86,11 +114,14 @@ async function handleRequest(request, env)
       // TODO: Remove.
       /*const stmt = env.DB.prepare("SELECT * FROM Admins")
       const { results } = await stmt.all()
-      await Send_TextMessage(146995203, results[0].FullName, {});
+      for(let x = 0; x < results.length; x++)
+      {
+        await Send_TextMessage(146995203, results[x].FullName, {});
+      }
       return new Response("OK");*/
 
       // Route -> Macro Command.
-      if(await Route_MacroCommand(message) === true)
+      if(await Route_MacroCommand(env, message) === true)
       {
         return new Response("OK")
       }
@@ -102,13 +133,13 @@ async function handleRequest(request, env)
         let chatId = message.from.id
 
         // Route -> Creator.
-        if(await Route_PrivateChat_IsCreator(message) === true)
+        if(await Route_PrivateChat_IsCreator(env, message) === true)
         {
           return new Response("OK")
         }
 
         // Route -> Private Chat -> New User
-        if(await Route_PrivateChat_NonRegisteredUser(message) === true)
+        if(await Route_PrivateChat_NonRegisteredUser(env, message) === true)
         {
           return new Response("OK")
         }
@@ -121,7 +152,7 @@ async function handleRequest(request, env)
       let channel_Message = payload.channel_post
       
       // Route -> Macro Command.
-      if(await Route_MacroCommand(channel_Message) === true)
+      if(await Route_MacroCommand(env, channel_Message) === true)
       {
         return new Response("OK")
       }
@@ -129,7 +160,7 @@ async function handleRequest(request, env)
    
     
   // Prompt bad input command if all routings fail.
-  await Prompt_BadInputCommand(payload.message)
+  await Prompt_BadInputCommand(env, payload.message)
 
   }
 
@@ -137,7 +168,7 @@ async function handleRequest(request, env)
 }
 
 // Handler -> Macro command.
-async function Route_MacroCommand(message)
+async function Route_MacroCommand(env, message)
 {
   if("text" in message)
   {
@@ -150,7 +181,7 @@ async function Route_MacroCommand(message)
     {
       let prompt_ChatIdText = `☁ شماره انحصاری این چت:\n<code>${message.chat.id}</code>`
     
-      await Send_TextMessage(message.chat.id, prompt_ChatIdText, {})
+      await Send_TextMessage(env, message.chat.id, prompt_ChatIdText, {})
 
       return true
     }
@@ -161,11 +192,11 @@ async function Route_MacroCommand(message)
       if("from" in message)
       {
         let prompt_UserIdText = `🔑 شماره انحصاری نشست کاربری:\n<code>${message.from.id}</code>`
-        await Send_TextMessage(message.chat.id, prompt_UserIdText, {})
+        await Send_TextMessage(env, message.chat.id, prompt_UserIdText, {})
       }
       else
       {
-        await Send_TextMessage(message.chat.id, "🚫 شماره نشست کاربری فقط از طریق ارسال پیام خصوصی به بات امکان‌پذیر می‌باشد.", {})
+        await Send_TextMessage(env, message.chat.id, "🚫 شماره نشست کاربری فقط از طریق ارسال پیام خصوصی به بات امکان‌پذیر می‌باشد.", {})
       }
 
       return true
@@ -181,14 +212,14 @@ async function Route_MacroCommand(message)
         // If input channel is not a number...
         if(isNaN(announcement_Channel_ID) === true)
         {
-          await Send_TextMessage(message.chat.id, "❌ مقدار شماره کانال تنظیم شده معتبر نیست.\n\n👈 از /start استفاده کنید.")
+          await Send_TextMessage(env, message.chat.id, "❌ مقدار شماره کانال تنظیم شده معتبر نیست.\n\n👈 از /start استفاده کنید.")
           return true
         }
 
         // Send a test message to specified channel.
         let promptText_TestMessage = `✅ پیام تست ارسال شده.\n\n👈 از طرف:  <b>${message.from.first_name}</b>\n📅 تاریخ: <b>${new Date().toLocaleString('fa-ir')}</b>`
-        await Send_TextMessage(announcement_Channel_ID, promptText_TestMessage, {})
-        await Send_TextMessage(message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
+        await Send_TextMessage(env, announcement_Channel_ID, promptText_TestMessage, {})
+        await Send_TextMessage(env, message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
 
         return true
       }
@@ -199,16 +230,18 @@ async function Route_MacroCommand(message)
     {
       if("from" in message)
       {
-        if(await IsCreator(message.from.id) === true)
+        if(await IsAdmin(env, message.from.id) === true)
         {
-          switch(creator_State)
+          let admin_State = await DB_Get_Admin_State(env, message.from.id)
+
+          switch(admin_State)
           {
             case STATE_USER_INITIAL:
-              await Prompt_Creator_MainMenu(message)
+              await Prompt_Creator_MainMenu(env, message)
               return true
 
             case STATE_CREATOR_SETTING_CHANNEL:
-              await Prompt_Creator_SetChannel(message)
+              await Prompt_Creator_SetChannel(env, message)
               return true
           }
         }
@@ -220,11 +253,13 @@ async function Route_MacroCommand(message)
 }
 
 // Handler -> Private Chat - Is Creator
-async function Route_PrivateChat_IsCreator(message)
+async function Route_PrivateChat_IsCreator(env, message)
 {
-  if(await IsCreator(message.from.id) === true)
+  if(await IsAdmin(env, message.from.id) === true)
   {
-    switch(creator_State)
+    let admin_State = await DB_Get_Admin_State(env, message.from.id)
+
+    switch(admin_State)
     {
       // Initial state.
       case STATE_USER_INITIAL:
@@ -232,8 +267,9 @@ async function Route_PrivateChat_IsCreator(message)
         // Creator -> Set Channel
         if(message.text === "📢 تنظیم کانال اطلاع‌رسانی")
         {
-          await Prompt_Creator_SetChannel(message)
-          creator_State = STATE_CREATOR_SETTING_CHANNEL
+          await Prompt_Creator_SetChannel(env, message)
+          // creator_State = STATE_CREATOR_SETTING_CHANNEL
+          await DB_Set_Admin_State(env, message.from.id, STATE_CREATOR_SETTING_CHANNEL)
 
           return true
         }
@@ -266,11 +302,12 @@ async function Route_PrivateChat_IsCreator(message)
 
         // Otherwise, treat input text as Channel ID.
         announcement_Channel_ID = +message.text
-        await Prompt_SetAnnouncementChannel(message, announcement_Channel_ID)
+        await Prompt_SetAnnouncementChannel(env, message, announcement_Channel_ID)
 
         // Automatically return to main menu.
-        creator_State = STATE_USER_INITIAL
-        await Prompt_Creator_MainMenu(message)
+        // creator_State = STATE_USER_INITIAL
+        await DB_Set_Admin_State(env, message.from.id, STATE_USER_INITIAL)
+        await Prompt_Creator_MainMenu(env, message)
 
         return true
 
@@ -281,10 +318,10 @@ async function Route_PrivateChat_IsCreator(message)
   return false
 }
 
-async function Route_PrivateChat_NonRegisteredUser(message)
+async function Route_PrivateChat_NonRegisteredUser(env, message)
 {
   // Check if user is not the creator himself.
-  if(await IsCreator(message.from.id) === true)
+  if(await IsAdmin(env, message.from.id) === true)
   {
     return false
   }
@@ -313,7 +350,7 @@ async function Route_PrivateChat_NonRegisteredUser(message)
       is_persistent: true
     }
 
-    await Send_TextMessage(message.chat.id, text_WelcomeMenu, replyMarkup_WelcomeMenuKeyboard)
+    await Send_TextMessage(env, message.chat.id, text_WelcomeMenu, replyMarkup_WelcomeMenuKeyboard)
 
     return true
   }
@@ -321,17 +358,17 @@ async function Route_PrivateChat_NonRegisteredUser(message)
   return false
 }
 
-async function Prompt_BadInputCommand(message)
+async function Prompt_BadInputCommand(env, message)
 {
 
   let text_BadInput = `🚫 دستور وارد شده در این لحظه قابل پردازش نیست.
   
   👈 می‌توانید از /start استفاده کنید.`
 
-  await Send_TextMessage(message.chat.id, text_BadInput, {})
+  await Send_TextMessage(env, message.chat.id, text_BadInput, {})
 }
 
-async function Prompt_Creator_SetChannel(message)
+async function Prompt_Creator_SetChannel(env, message)
 {
   let promptText_SetChannel = `<b>👈 تنظیم کانال اطلاع‌رسانی بات</b>
   
@@ -339,10 +376,10 @@ async function Prompt_Creator_SetChannel(message)
   
   👇 حال، می‌توانید با وارد کردن شماره چت کانال جدید، آن را جهت اطلاع رسانی بات تنظیم کنید.`
 
-  await Send_TextMessage(message.chat.id, promptText_SetChannel, { keyboard: [[{ text: "❌ حذف کانال تنظیم شده فعلی در صورت وجود" }], [{text: "🔙 بازگشت به منوی قبلی"}]]})
+  await Send_TextMessage(env, message.chat.id, promptText_SetChannel, { keyboard: [[{ text: "❌ حذف کانال تنظیم شده فعلی در صورت وجود" }], [{text: "🔙 بازگشت به منوی قبلی"}]]})
 }
 
-async function Prompt_SetAnnouncementChannel(message, newChannelID)
+async function Prompt_SetAnnouncementChannel(env, message, newChannelID)
 {
   let prompt_SetChannelID = `✅ کانال اطلاع‌رسانی با موفقیت به شماره 
   <code>${newChannelID}</code>
@@ -352,10 +389,10 @@ async function Prompt_SetAnnouncementChannel(message, newChannelID)
   
   <i><b>⚠ در صورت بروز هر گونه اشکال، می‌توانید از دستور /help استفاده کنید.</b></i>`
 
-  await Send_TextMessage(message.chat.id, prompt_SetChannelID, { remove_keyboard: true })
+  await Send_TextMessage(env, message.chat.id, prompt_SetChannelID, { remove_keyboard: true })
 }
 
-async function Prompt_Creator_MainMenu(message)
+async function Prompt_Creator_MainMenu(env, message)
 {
   let text_CreatorMenu = "👈 مهربد ملاکاظمی خوبده گرامی، به سامانه خوش آمدید."
   let replyMarkup_CreatorMenu = 
@@ -370,7 +407,7 @@ async function Prompt_Creator_MainMenu(message)
                 is_persistent: true
               }
           
-    await Send_TextMessage(message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
+    await Send_TextMessage(env, message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
 }
 
 function Get_PersianDateTime_Now()
