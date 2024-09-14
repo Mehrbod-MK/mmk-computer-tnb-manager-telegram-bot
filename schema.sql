@@ -26,3 +26,10 @@ CREATE TABLE IF NOT EXISTS Users(
     Email VARCHAR(255)
 );
 /**********************************************/
+
+/**************** TABLE: CHANNELS ****************/
+DROP TABLE IF EXISTS Channels;
+CREATE TABLE Channels (
+    ChannelID BIGINT PRIMARY KEY NOT NULL
+);
+/*************************************************/
