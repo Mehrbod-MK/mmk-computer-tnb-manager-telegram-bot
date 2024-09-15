@@ -33,3 +33,22 @@ CREATE TABLE Channels (
     ChannelID BIGINT PRIMARY KEY NOT NULL
 );
 /*************************************************/
+
+/**************** TABLE: SCHEDULES ****************/
+DROP TABLE IF EXISTS Schedules;
+CREATE TABLE Schedules(
+    LessonCode VARCHAR(100) NOT NULL,
+    PresentationCode VARCHAR(100) NOT NULL,
+
+    LessonName VARCHAR(255) NOT NULL,
+    ProfessorName VARCHAR(100) NOT NULL,
+    RoomName VARCHAR(100) NOT NULL,
+    LessonDayOfWeek VARCHAR(15) NOT NULL DEFAULT "نامعین",
+    LessonTimeStart VARCHAR(20) NOT NULL,
+    LessonTimeEnd VARCHAR(20) NOT NULL,
+
+    PRIMARY KEY(LessonCode, PresentationCode),
+
+    CONSTRAINT CHECK_DayOfWeeks CHECK(LessonDayOfWeek = "شنبه" OR LessonDayOfWeek = "یکشنبه" OR LessonDayOfWeek = "دوشنبه" OR LessonDayOfWeek = "سه‌شنبه" OR LessonDayOfWeek = "چهارشنبه" OR LessonDayOfWeek = "پنجشنبه" OR LessonDayOfWeek = "جمعه" OR LessonDayOfWeek = "نامعین")
+)
+/**************************************************/
