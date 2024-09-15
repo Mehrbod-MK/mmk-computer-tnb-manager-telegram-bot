@@ -12,8 +12,8 @@
 // Islamic Azad University - Tehran North Branch
 // Date:  19 Shahrivar 1403
 
-// import "persian-date"
-// import { persianDate } from "persian-date"
+import "persian-date"
+import persianDate from "persian-date"
 
 // Define array of registered users.
 let users = []
@@ -230,7 +230,7 @@ async function Route_MacroCommand(env, message)
         }
 
         // Send a test message to specified channel.
-        let promptText_TestMessage = `✅ پیام تست ارسال شده.\n\n👈 از طرف:  <b>${message.from.first_name}</b>\n📅 تاریخ: <b>${new Date().toLocaleString('fa-ir')}</b>`
+        let promptText_TestMessage = `✅ پیام تست ارسال شده.\n\n👈 از طرف:  <b>${message.from.first_name}</b>\n📅 تاریخ: <b>${System_GetDateTime_NumericPersianString(new Date())}</b>`
         await Send_TextMessage(env, channelID, promptText_TestMessage, {})
         await Send_TextMessage(env, message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
 
@@ -435,4 +435,19 @@ async function Prompt_RemovedAnnouncementChannelID(env, message)
   let promptText_RemovedChannel = `☑ کانال با موفقیت حذف شد.`
 
   await Send_TextMessage(env, message.chat.id, promptText_RemovedChannel, {})
+}
+
+function System_GetDateTime_NumericPersianString(date)
+{
+  let options = {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric'
+  }
+
+  return date.toLocaleString('fa-IR', options)
 }
