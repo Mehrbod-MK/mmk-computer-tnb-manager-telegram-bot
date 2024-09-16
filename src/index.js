@@ -24,11 +24,24 @@ const STATE_CREATOR_SETTING_CHANNEL = 1
 
 export default
 {
+  async scheduled(event, env, ctx) {
+    await CronReached(event, env, ctx)
+  },
+
   fetch(request, env)
   {
     var response = handleRequest(request, env);
     return response;
   }
+}
+
+async function CronReached(event, env, ctx)
+{
+  // TODO: Remove.
+  let shamsiJsonDate = System_Get_Shamsi_JSON(new Date())
+  let testText = `${shamsiJsonDate.shamsi_NameOfDayOfWeek}، ${shamsiJsonDate.shamsi_Date.date()} ${shamsiJsonDate.shamsi_NameOfMonth} ${shamsiJsonDate.shamsi_Date.year()}`
+
+  await Send_TextMessage(env, 146995203, testText, {})
 }
 
 // Function for sending a message to a chat id.
@@ -447,4 +460,30 @@ function System_GetDateTime_NumericPersianString(date)
   }
 
   return date.toLocaleString('fa-IR', options)
+}
+
+function System_Get_Shamsi_JSON(gregorianDate)
+{
+  let options = {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric'
+  }
+  let gregorianDateString = gregorianDate.toLocaleString([], options)
+
+  let gregorianDateNumberLiterals = gregorianDateString.match(/(-\d+|\d+)(,\d+)*(\.\d+)*/g)
+
+  let correctGregorianDate = new Date(+gregorianDateNumberLiterals[2], +gregorianDateNumberLiterals[0] - 1, gregorianDateNumberLiterals[1], gregorianDateNumberLiterals[3], gregorianDateNumberLiterals[4], gregorianDateNumberLiterals[5], 0)
+
+  let shamsiDate = new persianDate(correctGregorianDate)
+  let nameOfDayOfWeek = shamsiDate.toLocale('fa').format("dddd")
+  let nameOfMonth = shamsiDate.toLocale('fa').format("MMMM")
+
+  let jsonObject = { shamsi_Date: shamsiDate, shamsi_NameOfDayOfWeek: nameOfDayOfWeek, shamsi_NameOfMonth: nameOfMonth }
+
+  return jsonObject
 }

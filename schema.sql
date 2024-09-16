@@ -50,5 +50,5 @@ CREATE TABLE Schedules(
     PRIMARY KEY(LessonCode, PresentationCode),
 
     CONSTRAINT CHECK_DayOfWeeks CHECK(LessonDayOfWeek = "شنبه" OR LessonDayOfWeek = "یکشنبه" OR LessonDayOfWeek = "دوشنبه" OR LessonDayOfWeek = "سه‌شنبه" OR LessonDayOfWeek = "چهارشنبه" OR LessonDayOfWeek = "پنجشنبه" OR LessonDayOfWeek = "جمعه" OR LessonDayOfWeek = "نامعین")
-)
+);
 /**************************************************/
