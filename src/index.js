@@ -90,7 +90,7 @@ async function Send_TextMessage(env, chat_id, text, reply_markup, parse_mode = "
     parse_mode
   }
 
-  const url = `https://api.telegram.org/bot${API_KEY}/sendMessage`
+  const url = `https://api.telegram.org/bot${env.API_KEY}/sendMessage`
   
   const data = await fetch(url,
     {
