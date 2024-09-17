@@ -22,9 +22,6 @@ let users = []
 const STATE_USER_INITIAL = 0
 const STATE_CREATOR_SETTING_CHANNEL = 1
 
-// .TOML Variables.
-const API_KEY = "7377397628:AAFNmab7t3Aqdv-o77rKMYTdyie7o_D9gCw";
-
 export default
 {
   async scheduled(event, env, ctx) {
@@ -93,7 +90,7 @@ async function Send_TextMessage(env, chat_id, text, reply_markup, parse_mode = "
     parse_mode
   }
 
-  const url = `https://api.telegram.org/bot${API_KEY}/sendMessage`
+  const url = `https://api.telegram.org/bot${env.API_KEY}/sendMessage`
   
   const data = await fetch(url,
     {
