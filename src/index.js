@@ -40,11 +40,46 @@ export default
 
 async function CronReached(event, env, ctx)
 {
-  // TODO: Remove.
-  let shamsiJsonDate = System_Get_Shamsi_JSON(new Date())
-  let testText = `${shamsiJsonDate.shamsi_NameOfDayOfWeek}، ${shamsiJsonDate.shamsi_Date.date()} ${shamsiJsonDate.shamsi_NameOfMonth} ${shamsiJsonDate.shamsi_Date.year()}`
+  // Get the list of lessons that belong to today.
+  let schedulesForToday = await DB_Get_ListOfSchedules_Today(env)
 
-  await Send_TextMessage(env, 146995203, testText, {})
+  // Shamsi DateTime now.
+  let shamsiDateTimeNow = System_Get_Shamsi_JSON(new Date())
+
+  // Enumerate each lesson for today.
+  for(let i = 0; i < schedulesForToday.length; i++)
+  {
+    // Get schedule object.
+    let scheduleJSON = schedulesForToday[i]
+
+    // Extract time literals from DB time string.
+    let schedule_Start_TimeLiterals = scheduleJSON.LessonTimeStart.match(/(-\d+|\d+)(,\d+)*(\.\d+)*/g)
+    let schedule_End_TimeLiterals = scheduleJSON.LessonTimeEnd.match(/(-\d+|\d+)(,\d+)*(\.\d+)*/g)
+
+    // Calculate required times in minutes from 00:00.
+    let minutesPassedToday = (shamsiDateTimeNow.shamsi_Date.hour() * 60) + shamsiDateTimeNow.shamsi_Date.minute()
+    let minutesForStart = (+schedule_Start_TimeLiterals[0] * 60) + +schedule_Start_TimeLiterals[1]
+    let minutesForEnd = (+schedule_End_TimeLiterals[0] * 60) + +schedule_End_TimeLiterals[1]
+
+    // Assign time thresholds.
+    const threshold_Minutes_BeforeStartingSchedule = 5
+
+    // Is lesson going to start in a few minutes?
+    let minutes_Left_ToStart = minutesForStart - minutesPassedToday
+    if(minutes_Left_ToStart === threshold_Minutes_BeforeStartingSchedule)
+    {
+      await Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
+    }
+
+    // TODO: Remove.
+    /*let testText = `LessonTimeStart: ${scheduleJSON.LessonTimeStart}
+    LessonTimeEnd: ${scheduleJSON.LessonTimeEnd}
+    
+    minutesPassedToday: ${minutesPassedToday}
+    minutesForStart: ${minutesForStart}
+    minutesForEnd: ${minutesForEnd}`
+    await Send_TextMessage(env, 146995203, testText, {})*/
+  }
 }
 
 // Function for sending a message to a chat id.
@@ -129,6 +164,14 @@ async function DB_Get_AnnouncementChannel(env)
   }
 
   return results[0].ChannelID
+}
+
+async function DB_Get_ListOfSchedules_Today(env)
+{
+  const stmt = env.DB.prepare("SELECT * FROM Schedules WHERE LessonDayOfWeek = ?").bind(`${System_Get_Shamsi_JSON(new Date()).shamsi_NameOfDayOfWeek}`)
+  const { results } = await stmt.all()
+
+  return results
 }
 
 async function handleRequest(request, env)
@@ -459,7 +502,8 @@ function System_GetDateTime_NumericPersianString(date)
     day: 'numeric',
     hour: 'numeric',
     minute: 'numeric',
-    second: 'numeric'
+    second: 'numeric',
+    hour12: false
   }
 
   return date.toLocaleString('fa-IR', options)
@@ -474,7 +518,8 @@ function System_Get_Shamsi_JSON(gregorianDate)
     day: 'numeric',
     hour: 'numeric',
     minute: 'numeric',
-    second: 'numeric'
+    second: 'numeric',
+    hour12: false
   }
   let gregorianDateString = gregorianDate.toLocaleString([], options)
 
@@ -483,10 +528,48 @@ function System_Get_Shamsi_JSON(gregorianDate)
   let correctGregorianDate = new Date(+gregorianDateNumberLiterals[2], +gregorianDateNumberLiterals[0] - 1, gregorianDateNumberLiterals[1], gregorianDateNumberLiterals[3], gregorianDateNumberLiterals[4], gregorianDateNumberLiterals[5], 0)
 
   let shamsiDate = new persianDate(correctGregorianDate)
-  let nameOfDayOfWeek = shamsiDate.toLocale('fa').format("dddd")
+  let dayOfWeekIndex = shamsiDate.day()
   let nameOfMonth = shamsiDate.toLocale('fa').format("MMMM")
+
+  let nameOfDayOfWeek = "نامعین"
+  switch(dayOfWeekIndex)
+  {
+    case 1:
+      nameOfDayOfWeek = "شنبه"
+      break
+    case 2:
+      nameOfDayOfWeek = "یکشنبه"
+      break
+    case 3:
+      nameOfDayOfWeek = "دوشنبه"
+      break
+    case 4:
+      nameOfDayOfWeek = "سه‌شنبه"
+      break
+    case 5:
+      nameOfDayOfWeek = "چهارشنبه"
+      break
+    case 6:
+      nameOfDayOfWeek = "پنجشنبه"
+      break
+    case 7:
+      nameOfDayOfWeek = "جمعه"
+      break
+  }
 
   let jsonObject = { shamsi_Date: shamsiDate, shamsi_NameOfDayOfWeek: nameOfDayOfWeek, shamsi_NameOfMonth: nameOfMonth }
 
   return jsonObject
+}
+
+async function Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
+{
+  let promptText_ScheduleIsAboutToStart = `🔔 #یادآوری
+
+🏛 کلاس درس <b>${scheduleJSON.LessonName}</b> با کد درس <b>${scheduleJSON.LessonCode}</b> و کد ارائه <b>${scheduleJSON.PresentationCode}</b> توسط استاد محترم <b>${scheduleJSON.ProfessorName}</b> در کلاس <b>${scheduleJSON.RoomName}</b> امروز <u>${scheduleJSON.LessonDayOfWeek}</u> رأس ساعت <b>${scheduleJSON.LessonTimeStart}</b> طبق تقویم دانشگاهی برگزار خواهد شد و تا <b>${scheduleJSON.LessonTimeEnd}</b> ادامه خواهد داشت.
+
+🙏 از دانشجویان محترم تقاضا می‌شود تا رأس ساعت مقرر سر کلاس حاضر شوند.
+⚠ <b><i>در صورت هماهنگی عدم تشکیل کلاس توسط استاد، مراتب را به آموزش گروه کامپیوتر اطلاع دهید.</i></b>`
+
+  await Send_TextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleIsAboutToStart, {})
 }
