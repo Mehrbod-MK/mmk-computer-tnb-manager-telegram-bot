@@ -37,8 +37,8 @@ CREATE TABLE Channels (
 /**************** TABLE: SCHEDULES ****************/
 DROP TABLE IF EXISTS Schedules;
 CREATE TABLE Schedules(
-    LessonCode VARCHAR(100) NOT NULL,
-    PresentationCode VARCHAR(100) NOT NULL,
+    LessonCode VARCHAR(25) NOT NULL,
+    PresentationCode VARCHAR(25) NOT NULL,
 
     LessonName VARCHAR(255) NOT NULL,
     ProfessorName VARCHAR(100) NOT NULL,

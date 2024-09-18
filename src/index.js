@@ -68,6 +68,12 @@ async function CronReached(event, env, ctx)
       await Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
     }
 
+    // If lesson's time has reached.
+    if(minutes_Left_ToStart === 0)
+    {
+      await Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
+    }
+
     // TODO: Remove.
     /*let testText = `LessonTimeStart: ${scheduleJSON.LessonTimeStart}
     LessonTimeEnd: ${scheduleJSON.LessonTimeEnd}
@@ -569,4 +575,31 @@ async function Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
 ⚠ <b><i>در صورت هماهنگی عدم تشکیل کلاس توسط استاد، مراتب را به آموزش گروه کامپیوتر اطلاع دهید.</i></b>`
 
   await Send_TextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleIsAboutToStart, {})
+}
+
+async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
+{
+  let promptText_ScheduleStarted = `⭐ #اعلان
+
+🏛 کلاس درس <b>${scheduleJSON.LessonName}</b> با کد درس <b>${scheduleJSON.LessonCode}</b> و کد ارائه <b>${scheduleJSON.PresentationCode}</b> توسط استاد محترم <b>${scheduleJSON.ProfessorName}</b> در کلاس <b>${scheduleJSON.RoomName}</b> امروز <u>${scheduleJSON.LessonDayOfWeek}</u> رأس ساعت <b>${scheduleJSON.LessonTimeStart}</b> شروع شده است.
+
+⌛ دانشجویان باید بر اساس تعداد واحدهای درسی، مدت زمانی را منتظر استاد باشند.
+
+👍 در صورت حضور استاد در کلاس، بر روی لایک کلیک کنید.
+👎 در صورت عدم حضور استاد در کلاس پس از موعد مقرر، بر روی دیسلایک کلیک کنید.
+⏳ در صورت حضور استاد پس از میزان تأخیر قابل توجه، بر روی ساعت شنی کلیک کنید.
+
+⚠ <b>توجه:  مسئولیت گزارش دروغ بر عهده دانشجو خواهد بود و شخص خاطی، به کمیته انضباطی معرفی خواهد شد.</b>`
+
+  let replyMarkup_InlineButtons = {
+    inline_keyboard: [
+      [ 
+        { text: "👍", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+        { text: "👎", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
+        { text: "⏳", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+      ]
+    ]
+  }
+
+  await Send_TextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
 }
