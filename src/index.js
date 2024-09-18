@@ -86,7 +86,7 @@ async function CronReached(event, env, ctx)
 }
 
 // Function for sending a message to a chat id.
-async function Send_TextMessage(env, chat_id, text, reply_markup, parse_mode = "HTML")
+async function Bot_SendTextMessage(env, chat_id, text, reply_markup, parse_mode = "HTML")
 {
   let messageJSON = 
   {
@@ -105,6 +105,27 @@ async function Send_TextMessage(env, chat_id, text, reply_markup, parse_mode = "
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(messageJSON)
+    }).then(resp => resp.json())
+}
+
+async function Bot_AnswerCallbackQuery(env, callback_query_id, text = "✅ پردازش موفقیت‌آمیز بود", show_alert = true)
+{
+  let answerCallbackQueryJSON = 
+  {
+    callback_query_id,
+    text,
+    show_alert
+  }
+
+  const url = `https://api.telegram.org/bot${env.API_KEY}/answerCallbackQuery`
+  
+  const data = await fetch(url,
+    {
+      method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(answerCallbackQueryJSON)
     }).then(resp => resp.json())
 }
 
@@ -190,29 +211,24 @@ async function handleRequest(request, env)
     {
       let message = payload.message
 
-      // Route -> Macro Command.
-      if(await Route_MacroCommand(env, message) === true)
+      // Message -> Text (Chat)
+      if(("text" in message) && ("chat" in message) && ("from" in message))
+      {
+        if(await Process_Message_Text_Chat(env, message) === true)
+        {
+          return new Response("OK")
+        }
+      }
+    }
+
+    // Update -> CallbackQuery
+    if("callback_query" in payload)
+    {
+      let cbQuery = payload.callback_query
+
+      if(await Process_CallbackQuery(env, cbQuery) === true)
       {
         return new Response("OK")
-      }
-
-      let chatType = message.chat.type
-
-      if(chatType === "private")
-      {
-        let chatId = message.from.id
-
-        // Route -> Creator.
-        if(await Route_PrivateChat_IsCreator(env, message) === true)
-        {
-          return new Response("OK")
-        }
-
-        // Route -> Private Chat -> New User
-        if(await Route_PrivateChat_NonRegisteredUser(env, message) === true)
-        {
-          return new Response("OK")
-        }
       }
     }
 
@@ -237,6 +253,43 @@ async function handleRequest(request, env)
   return new Response("OK")
 }
 
+async function Process_CallbackQuery(env, callback_query)
+{
+  let cbQuery_Id = callback_query.id
+
+  // TODO: Remove.
+  await Bot_AnswerCallbackQuery(env, cbQuery_Id)
+  return true
+}
+
+async function Process_Message_Text_Chat(env, message)
+{
+  // Route -> Macro Command.
+  if(await Route_MacroCommand(env, message) === true)
+  {
+    return true
+  }
+
+  let chatType = message.chat.type
+
+  if(chatType === "private")
+  {
+    let chatId = message.from.id
+
+    // Route -> Creator.
+    if(await Route_PrivateChat_IsCreator(env, message) === true)
+    {
+      return true
+    }
+
+    // Route -> Private Chat -> New User
+    if(await Route_PrivateChat_NonRegisteredUser(env, message) === true)
+    {
+      return true
+    }
+  }
+}
+
 // Handler -> Macro command.
 async function Route_MacroCommand(env, message)
 {
@@ -251,7 +304,7 @@ async function Route_MacroCommand(env, message)
     {
       let prompt_ChatIdText = `☁ شماره انحصاری این چت:\n<code>${message.chat.id}</code>`
     
-      await Send_TextMessage(env, message.chat.id, prompt_ChatIdText, {})
+      await Bot_SendTextMessage(env, message.chat.id, prompt_ChatIdText, {})
 
       return true
     }
@@ -262,11 +315,11 @@ async function Route_MacroCommand(env, message)
       if("from" in message)
       {
         let prompt_UserIdText = `🔑 شماره انحصاری نشست کاربری:\n<code>${message.from.id}</code>`
-        await Send_TextMessage(env, message.chat.id, prompt_UserIdText, {})
+        await Bot_SendTextMessage(env, message.chat.id, prompt_UserIdText, {})
       }
       else
       {
-        await Send_TextMessage(env, message.chat.id, "🚫 شماره نشست کاربری فقط از طریق ارسال پیام خصوصی به بات امکان‌پذیر می‌باشد.", {})
+        await Bot_SendTextMessage(env, message.chat.id, "🚫 شماره نشست کاربری فقط از طریق ارسال پیام خصوصی به بات امکان‌پذیر می‌باشد.", {})
       }
 
       return true
@@ -284,14 +337,14 @@ async function Route_MacroCommand(env, message)
         // If input channel is not a number...
         if(isNaN(channelID) === true)
         {
-          await Send_TextMessage(env, message.chat.id, "❌ مقدار شماره کانال تنظیم شده معتبر نیست.\n\n👈 از /start استفاده کنید.")
+          await Bot_SendTextMessage(env, message.chat.id, "❌ مقدار شماره کانال تنظیم شده معتبر نیست.\n\n👈 از /start استفاده کنید.")
           return true
         }
 
         // Send a test message to specified channel.
         let promptText_TestMessage = `✅ پیام تست ارسال شده.\n\n👈 از طرف:  <b>${message.from.first_name}</b>\n📅 تاریخ: <b>${System_GetDateTime_NumericPersianString(new Date())}</b>`
-        await Send_TextMessage(env, channelID, promptText_TestMessage, {})
-        await Send_TextMessage(env, message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
+        await Bot_SendTextMessage(env, channelID, promptText_TestMessage, {})
+        await Bot_SendTextMessage(env, message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
 
         return true
       }
@@ -427,7 +480,7 @@ async function Route_PrivateChat_NonRegisteredUser(env, message)
       is_persistent: true
     }
 
-    await Send_TextMessage(env, message.chat.id, text_WelcomeMenu, replyMarkup_WelcomeMenuKeyboard)
+    await Bot_SendTextMessage(env, message.chat.id, text_WelcomeMenu, replyMarkup_WelcomeMenuKeyboard)
 
     return true
   }
@@ -442,7 +495,10 @@ async function Prompt_BadInputCommand(env, message)
   
   👈 می‌توانید از /start استفاده کنید.`
 
-  await Send_TextMessage(env, message.chat.id, text_BadInput, {})
+  if("chat" in message)
+  {
+    await Bot_SendTextMessage(env, message.chat.id, text_BadInput, {})
+  }
 }
 
 async function Prompt_Creator_SetChannel(env, message)
@@ -455,7 +511,7 @@ async function Prompt_Creator_SetChannel(env, message)
   
   👇 حال، می‌توانید با وارد کردن شماره چت کانال جدید، آن را جهت اطلاع رسانی بات تنظیم کنید.`
 
-  await Send_TextMessage(env, message.chat.id, promptText_SetChannel, { keyboard: [[{ text: "❌ حذف کانال تنظیم شده فعلی در صورت وجود" }], [{text: "🔙 بازگشت به منوی قبلی"}]]})
+  await Bot_SendTextMessage(env, message.chat.id, promptText_SetChannel, { keyboard: [[{ text: "❌ حذف کانال تنظیم شده فعلی در صورت وجود" }], [{text: "🔙 بازگشت به منوی قبلی"}]]})
 }
 
 async function Prompt_SetAnnouncementChannel(env, message, newChannelID)
@@ -468,7 +524,7 @@ async function Prompt_SetAnnouncementChannel(env, message, newChannelID)
   
   <i><b>⚠ در صورت بروز هر گونه اشکال، می‌توانید از دستور /help استفاده کنید.</b></i>`
 
-  await Send_TextMessage(env, message.chat.id, prompt_SetChannelID, { remove_keyboard: true })
+  await Bot_SendTextMessage(env, message.chat.id, prompt_SetChannelID, { remove_keyboard: true })
 }
 
 async function Prompt_Creator_MainMenu(env, message)
@@ -486,14 +542,14 @@ async function Prompt_Creator_MainMenu(env, message)
                 is_persistent: true
               }
           
-    await Send_TextMessage(env, message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
+    await Bot_SendTextMessage(env, message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
 }
 
 async function Prompt_RemovedAnnouncementChannelID(env, message)
 {
   let promptText_RemovedChannel = `☑ کانال با موفقیت حذف شد.`
 
-  await Send_TextMessage(env, message.chat.id, promptText_RemovedChannel, {})
+  await Bot_SendTextMessage(env, message.chat.id, promptText_RemovedChannel, {})
 }
 
 function System_GetDateTime_NumericPersianString(date)
@@ -574,7 +630,7 @@ async function Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
 🙏 از دانشجویان محترم تقاضا می‌شود تا رأس ساعت مقرر سر کلاس حاضر شوند.
 ⚠ <b><i>در صورت هماهنگی عدم تشکیل کلاس توسط استاد، مراتب را به آموزش گروه کامپیوتر اطلاع دهید.</i></b>`
 
-  await Send_TextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleIsAboutToStart, {})
+  await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleIsAboutToStart, {})
 }
 
 async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
@@ -601,5 +657,5 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
     ]
   }
 
-  await Send_TextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
+  await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
 }
