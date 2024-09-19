@@ -108,7 +108,7 @@ async function Bot_SendTextMessage(env, chat_id, text, reply_markup, parse_mode 
     }).then(resp => resp.json())
 }
 
-async function Bot_AnswerCallbackQuery(env, callback_query_id, text = "✅ پردازش موفقیت‌آمیز بود", show_alert = true)
+async function Bot_AnswerCallbackQuery(env, callback_query_id, text = "🔵 پردازش شد.", show_alert = true)
 {
   let answerCallbackQueryJSON = 
   {
@@ -281,6 +281,8 @@ async function Process_Message_Text_Chat(env, message)
     {
       return true
     }
+
+    
 
     // Route -> Private Chat -> New User
     if(await Route_PrivateChat_NonRegisteredUser(env, message) === true)
