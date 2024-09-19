@@ -129,6 +129,27 @@ async function Bot_AnswerCallbackQuery(env, callback_query_id, text = "🔵 پر
     }).then(resp => resp.json())
 }
 
+async function Bot_EditMessageReplyMarkup(env, chat_id, message_id, reply_markup)
+{
+  let editMessageReplyMarkupJSON = 
+  {
+    chat_id,
+    message_id,
+    reply_markup
+  }
+
+  const url = `https://api.telegram.org/bot${env.API_KEY}/editMessageReplyMarkup`
+  
+  const data = await fetch(url,
+    {
+      method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(editMessageReplyMarkupJSON)
+    }).then(resp => resp.json())
+}
+
 // Function for checking admin privileges.
 async function IsAdmin(env, userId)
 {
@@ -340,6 +361,30 @@ async function DB_Check_Schedule_IsWithinDateTime(env, schedule, dateTime)
   return true
 }
 
+async function Bot_DB_UpdateVoteCounts_TeacherPresences(env, telegram_CallbackQuery, cbQueryDB)
+{
+  const stmt_Count_OKs = env.DB.prepare("SELECT COUNT(*) FROM CallbackQueries WHERE Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ? AND Submission_Result = ?").bind(cbQueryDB.Schedule_LessonCode, cbQueryDB.Schedule_PresentationCode, cbQueryDB.Submission_Date, "Teacher Presence", "OK")
+  const db_Count_OKs = +((await stmt_Count_OKs.raw())[0][0])
+  const stmt_Count_NOKs = env.DB.prepare("SELECT COUNT(*) FROM CallbackQueries WHERE Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ? AND Submission_Result = ?").bind(cbQueryDB.Schedule_LessonCode, cbQueryDB.Schedule_PresentationCode, cbQueryDB.Submission_Date, "Teacher Presence", "NOK")
+  const db_Count_NOKs = +((await stmt_Count_NOKs.raw())[0][0])
+  const stmt_Count_DELAYs = env.DB.prepare("SELECT COUNT(*) FROM CallbackQueries WHERE Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ? AND Submission_Result = ?").bind(cbQueryDB.Schedule_LessonCode, cbQueryDB.Schedule_PresentationCode, cbQueryDB.Submission_Date, "Teacher Presence", "DELAY")
+  const db_Count_DELAYs = +((await stmt_Count_DELAYs.raw())[0][0])
+
+  let inlineKeyboard_NewVoteCounts = {
+    inline_keyboard: [
+      [ 
+        { text: `👍 (${db_Count_OKs})`, callback_data: `SCH_OK_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }, 
+        { text: `👎 (${db_Count_NOKs})`, callback_data: `SCH_NOK_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` },
+        { text: `⏳ (${db_Count_DELAYs})`, callback_data: `SCH_DELAY_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }
+      ]
+    ]
+  }
+
+  // console.log(telegram_CallbackQuery.message.chat.id)
+
+  await Bot_EditMessageReplyMarkup(env, telegram_CallbackQuery.message.chat.id, telegram_CallbackQuery.message.message_id, inlineKeyboard_NewVoteCounts)
+}
+
 async function DB_Get_CallbackQuery_Schedule(env, userID, scheduleLessonCode, schedulePresentationCode, submissionDate_String, submission_Reason)
 {
   const stmt = env.DB.prepare("SELECT * FROM CallbackQueries WHERE From_UserID = ? AND Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ?").bind(userID, scheduleLessonCode, schedulePresentationCode, submissionDate_String, submission_Reason)
@@ -369,8 +414,6 @@ async function DB_Write_CallbackQuery_Schedule(env, user, callback_query)
     return false
   }
 
-  console.log("Reached here.")
-
   // Check if schedule has arrived and the user can submit their response.
   if(await DB_Check_Schedule_IsWithinDateTime(env, schedule, new Date()) === false)
   {
@@ -383,6 +426,10 @@ async function DB_Write_CallbackQuery_Schedule(env, user, callback_query)
   if(previousSubmittedCBQuery != null)
   {
     await Bot_AnswerCallbackQuery(env, callback_query.id, "❌ فقط یک بار می‌توانید رأی خود را ثبت کنید.")
+
+    // Update vote counts.
+    await Bot_DB_UpdateVoteCounts_TeacherPresences(env, callback_query, previousSubmittedCBQuery)
+    
     return true
   }
 
@@ -394,6 +441,10 @@ async function DB_Write_CallbackQuery_Schedule(env, user, callback_query)
   if(success === true)
   {
     await Bot_AnswerCallbackQuery(env, callback_query.id, "✅ رأی شما با موفقیت ثبت شد.")
+
+    // Update vote counts.
+    let newWrittenCB = await DB_Get_CallbackQuery_Schedule(env, user.UserID, schedule.LessonCode, schedule.PresentationCode, System_Get_Shamsi_Date_String(new Date()), "Teacher Presence")
+    await Bot_DB_UpdateVoteCounts_TeacherPresences(env, callback_query, newWrittenCB)
   }
   else
   {
@@ -818,7 +869,7 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
 ⌛ دانشجویان باید بر اساس تعداد واحدهای درسی، مدت زمانی را منتظر استاد باشند.
 
 👍 در صورت حضور استاد در کلاس، بر روی لایک کلیک کنید.
-👎 در صورت عدم حضور استاد در کلاس پس از موعد مقرر، بر روی دیسلایک کلیک کنید.
+👎 در صورت عدم حضور استاد در کلاس پس از موعد مقرر یا هماهنگی قبلی، بر روی دیسلایک کلیک کنید.
 ⏳ در صورت حضور استاد پس از میزان تأخیر قابل توجه، بر روی ساعت شنی کلیک کنید.
 
 ⚠ <b>توجه:  مسئولیت گزارش دروغ بر عهده دانشجو خواهد بود و شخص خاطی، به کمیته انضباطی معرفی خواهد شد.</b>`
@@ -826,9 +877,9 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
   let replyMarkup_InlineButtons = {
     inline_keyboard: [
       [ 
-        { text: "👍", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
-        { text: "👎", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
-        { text: "⏳", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+        { text: "👍 (0)", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+        { text: "👎 (0)", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
+        { text: "⏳ (0)", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
       ]
     ]
   }
