@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS CallbackQueries(
 
     Submission_Timestamp BIGINT NOT NULL,
 
+    Submission_Result VARCHAR(100) NOT NULL,
+
     FOREIGN KEY(From_UserID) REFERENCES Users(UserID) ON UPDATE CASCADE ON DELETE CASCADE,
-    FOREIGN KEY(Schedule_LessonCode, Schedule_PresentationCode) REFERENCES Schedules(LessonCode, PresentationCode)
+    FOREIGN KEY(Schedule_LessonCode, Schedule_PresentationCode) REFERENCES Schedules(LessonCode, PresentationCode) ON UPDATE CASCADE ON DELETE CASCADE
 );
 /*********************************************************/

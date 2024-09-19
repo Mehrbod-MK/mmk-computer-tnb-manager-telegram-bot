@@ -253,13 +253,28 @@ async function handleRequest(request, env)
   return new Response("OK")
 }
 
+async function DB_Write_CallbackQuery_Schedule(env, cbQuery)
+{
+  
+}
+
 async function Process_CallbackQuery(env, callback_query)
 {
   let cbQuery_Id = callback_query.id
+  let cbQuery_Tokens = callback_query.data.split('_')
 
-  // TODO: Remove.
-  await Bot_AnswerCallbackQuery(env, cbQuery_Id)
-  return true
+  if(cbQuery_Tokens.length == 0)
+  {
+    return false
+  }
+
+  // SCH -> Schedules.
+  if(cbQuery_Tokens[0] === "SCH")
+  {
+    
+  }
+
+  return false
 }
 
 async function Process_Message_Text_Chat(env, message)
