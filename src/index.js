@@ -219,6 +219,9 @@ async function handleRequest(request, env)
           return new Response("OK")
         }
       }
+
+      // Prompt message -> bad input command if all message routings fail.
+      await Prompt_Message_BadInputCommand(env, payload.message)
     }
 
     // Update -> CallbackQuery
@@ -226,10 +229,14 @@ async function handleRequest(request, env)
     {
       let cbQuery = payload.callback_query
 
-      if(await Process_CallbackQuery(env, cbQuery) === true)
+      if(await Process_CallbackQuery_Data(env, cbQuery) === true)
       {
         return new Response("OK")
       }
+
+      // Answer CallbackQuery -> Internal Error.
+      await Bot_AnswerCallbackQuery(env, cbQuery.id, "🚫 خطای داخلی سیستم به وقوع پیوست.\n⁉ برای این کلید، دستوری تعریف نشده است یا پارامتر اشتباه وجود دارد.\n\n👈 لطفاً با راهبر سیستم تماس بگیرید.")
+      return new Response("OK")
     }
 
     // Update -> Channel Post
@@ -243,35 +250,185 @@ async function handleRequest(request, env)
         return new Response("OK")
       }
     }
-   
-    
-  // Prompt bad input command if all routings fail.
-  await Prompt_BadInputCommand(env, payload.message)
 
   }
 
   return new Response("OK")
 }
 
-async function DB_Write_CallbackQuery_Schedule(env, cbQuery)
+async function DB_Get_User(env, userID)
 {
-  
+  const stmt = env.DB.prepare("SELECT * FROM Users WHERE UserID = ?").bind(userID)
+  const { results } = await stmt.all()
+
+  if(results.length === 0)
+  {
+    return null
+  }
+
+  return results[0]
 }
 
-async function Process_CallbackQuery(env, callback_query)
+async function DB_Add_User(env, telegramUserJSON)
+{
+  const stmt = env.DB.prepare("INSERT INTO Users(UserID, FirstName, LastName, Username) VALUES(?, ?, ?, ?)").bind(telegramUserJSON.id, telegramUserJSON.first_name, telegramUserJSON.last_name, telegramUserJSON.username)
+  const { success } = await stmt.all()
+
+  return success
+}
+
+async function DB_AddOrGet_User(env, telegramUserJSON)
+{
+  // Check for existing user.
+  let existingUser = await DB_Get_User(env, telegramUserJSON.id)
+  if(existingUser !== null)
+  {
+    return existingUser
+  }
+
+  // Otherwise, add the user to the database.
+  let addNewUserResult = await DB_Add_User(env, telegramUserJSON)
+  // If the reuslt was successful, get the new user and return it.
+  if(addNewUserResult === true)
+  {
+    return await DB_Get_User(env, telegramUserJSON.id)
+  }
+
+  // Return NULL otherwise.
+  return null
+}
+
+async function DB_Get_Schedule(env, lessonCode, presentationCode)
+{
+  const stmt = env.DB.prepare("SELECT * FROM Schedules WHERE LessonCode = ? AND PresentationCode = ?").bind(lessonCode, presentationCode)
+  const { results } = await stmt.all()
+
+  if(results.length === 0)
+  {
+    return null
+  }
+
+  return results[0]
+}
+
+async function DB_Check_Schedule_IsWithinDateTime(env, schedule, dateTime)
+{
+  // Get Shamsi DateTime.
+  let shamsiJSON = System_Get_Shamsi_JSON(dateTime)
+
+  // Check the day of schedule. If it is not today, return false.
+  if(shamsiJSON.shamsi_NameOfDayOfWeek !== schedule.LessonDayOfWeek)
+  {
+    return false
+  }
+
+  // Extract time literals from DB time string.
+  let schedule_Start_TimeLiterals = schedule.LessonTimeStart.match(/(-\d+|\d+)(,\d+)*(\.\d+)*/g)
+  let schedule_End_TimeLiterals = schedule.LessonTimeEnd.match(/(-\d+|\d+)(,\d+)*(\.\d+)*/g)
+  // Calculate required times in minutes from 00:00.
+  let minutesPassedForDate = (shamsiJSON.shamsi_Date.hour() * 60) + shamsiJSON.shamsi_Date.minute()
+  let minutesForStart = (+schedule_Start_TimeLiterals[0] * 60) + +schedule_Start_TimeLiterals[1]
+  let minutesForEnd = (+schedule_End_TimeLiterals[0] * 60) + +schedule_End_TimeLiterals[1]
+
+  // Check if time is witihin schedule time. If not, return false.
+  if((minutesPassedForDate < minutesForStart) || (minutesPassedForDate > minutesForEnd))
+  {
+    return false
+  }
+
+  // Result is OK.
+  return true
+}
+
+async function DB_Get_CallbackQuery_Schedule(env, userID, scheduleLessonCode, schedulePresentationCode, submissionDate_String, submission_Reason)
+{
+  const stmt = env.DB.prepare("SELECT * FROM CallbackQueries WHERE From_UserID = ? AND Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ?").bind(userID, scheduleLessonCode, schedulePresentationCode, submissionDate_String, submission_Reason)
+  const { results } = await stmt.all()
+
+  if(results.length == 0)
+  {
+    return null
+  }
+
+  return results[0]
+}
+
+async function DB_Write_CallbackQuery_Schedule(env, user, callback_query)
+{
+  // Check expected tokens length.
+  let tokens = callback_query.data.split('_')
+  if((tokens.length != 4) || (tokens[0] !== "SCH"))
+  {
+    return false
+  }
+
+  // Get schedule.
+  let schedule = await DB_Get_Schedule(env, tokens[2], tokens[3])
+  if(schedule === null)
+  {
+    return false
+  }
+
+  console.log("Reached here.")
+
+  // Check if schedule has arrived and the user can submit their response.
+  if(await DB_Check_Schedule_IsWithinDateTime(env, schedule, new Date()) === false)
+  {
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "❌ فقط در بازه زمانی برگزاری کلاس می‌توانید رأی خود را ثبت کنید.")
+    return true
+  }
+
+  // Check if the user had previously submitted schedule result. If submitted, deny user.
+  let previousSubmittedCBQuery = await DB_Get_CallbackQuery_Schedule(env, user.UserID, schedule.LessonCode, schedule.PresentationCode, System_Get_Shamsi_Date_String(new Date()), "Teacher Presence")
+  if(previousSubmittedCBQuery != null)
+  {
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "❌ فقط یک بار می‌توانید رأی خود را ثبت کنید.")
+    return true
+  }
+
+  // Write new submitted callback query.
+  const stmt = env.DB.prepare("INSERT INTO CallbackQueries VALUES(?, ?, ?, ?, ?, ?, ?)").bind(callback_query.id, user.UserID, schedule.LessonCode, schedule.PresentationCode, System_Get_Shamsi_Date_String(new Date()), "Teacher Presence", tokens[1])
+  const { success } = await stmt.all()
+
+  // Answer the callback query finally.
+  if(success === true)
+  {
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "✅ رأی شما با موفقیت ثبت شد.")
+  }
+  else
+  {
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "🚫 خطا در ارتباط با پایگاه داده جهت ثبت رأی.\n\n👈 لطفاً با راهبر بات تماس بگیرید.")
+  }
+
+  return true
+}
+
+async function Process_CallbackQuery_Data(env, callback_query)
 {
   let cbQuery_Id = callback_query.id
   let cbQuery_Tokens = callback_query.data.split('_')
 
+  // Get the user who has requested this callback query.
+  let cbQuery_User = await DB_AddOrGet_User(env, callback_query.from)
+
+  // If query does not contain any data, cancel this routing.
   if(cbQuery_Tokens.length == 0)
   {
     return false
   }
 
+  // If the user is not allowed to work with callback queries.
+  if(cbQuery_User.Can_Use_CallbackQueries === false)
+  {
+    await Bot_AnswerCallbackQuery(env, cbQuery_Id, "⛔ شما مجاز به تعامل با بات نمی‌باشید.\n\n👈 لطفاً با راهبر بات تماس بگیرید.")
+    return true
+  }
+
   // SCH -> Schedules.
   if(cbQuery_Tokens[0] === "SCH")
   {
-    
+    // Write schedule data to DB.
+    await DB_Write_CallbackQuery_Schedule(env, cbQuery_User, callback_query)
   }
 
   return false
@@ -296,8 +453,6 @@ async function Process_Message_Text_Chat(env, message)
     {
       return true
     }
-
-    
 
     // Route -> Private Chat -> New User
     if(await Route_PrivateChat_NonRegisteredUser(env, message) === true)
@@ -505,8 +660,12 @@ async function Route_PrivateChat_NonRegisteredUser(env, message)
   return false
 }
 
-async function Prompt_BadInputCommand(env, message)
+async function Prompt_Message_BadInputCommand(env, message)
 {
+  if(message === undefined)
+  {
+    return
+  }
 
   let text_BadInput = `🚫 دستور وارد شده در این لحظه قابل پردازش نیست.
   
@@ -675,4 +834,10 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
   }
 
   await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
+}
+
+function System_Get_Shamsi_Date_String(gregorianDate)
+{
+  let shamsiJSON = System_Get_Shamsi_JSON(gregorianDate)
+  return `${shamsiJSON.shamsi_Date.format("YYYY")}-${shamsiJSON.shamsi_Date.format("MM")}-${shamsiJSON.shamsi_Date.format("DD")}`
 }

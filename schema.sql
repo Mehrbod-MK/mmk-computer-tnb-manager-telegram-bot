@@ -25,21 +25,21 @@ CREATE TABLE IF NOT EXISTS Users(
 
     UserState INTEGER UNSIGNED NOT NULL DEFAULT 0,
 
-    Email VARCHAR(255),
+    Email VARCHAR(255) DEFAULT NULL,
 
     Can_Use_CallbackQueries BOOLEAN NOT NULL DEFAULT TRUE
 );
 /**********************************************/
 
 /**************** TABLE: CHANNELS ****************/
-DROP TABLE IF EXISTS Channels;
+/* DROP TABLE IF EXISTS Channels; */
 CREATE TABLE IF NOT EXISTS Channels (
     ChannelID BIGINT PRIMARY KEY NOT NULL
 );
 /*************************************************/
 
 /**************** TABLE: SCHEDULES ****************/
-DROP TABLE IF EXISTS Schedules;
+/* DROP TABLE IF EXISTS Schedules; */
 CREATE TABLE IF NOT EXISTS Schedules(
     LessonCode VARCHAR(25) NOT NULL,
     PresentationCode VARCHAR(25) NOT NULL,
@@ -60,15 +60,18 @@ CREATE TABLE IF NOT EXISTS Schedules(
 /**************** TABLE: CALLBACK QUERIES ****************/
 DROP TABLE IF EXISTS CallbackQueries;
 CREATE TABLE IF NOT EXISTS CallbackQueries(
-    CallbackQueryID VARCHAR(50) PRIMARY KEY NOT NULL,
+    CallbackQueryID VARCHAR(50) NOT NULL,
     From_UserID BIGINT NOT NULL,
 
     Schedule_LessonCode VARCHAR(25),
     Schedule_PresentationCode VARCHAR(25),
 
-    Submission_Timestamp BIGINT NOT NULL,
+    Submission_Date VARCHAR(15) NOT NULL,
 
+    Submission_Reason VARCHAR(100) NOT NULL,
     Submission_Result VARCHAR(100) NOT NULL,
+
+    PRIMARY KEY(From_UserID, Schedule_LessonCode, Schedule_PresentationCode, Submission_Date, Submission_Reason),
 
     FOREIGN KEY(From_UserID) REFERENCES Users(UserID) ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY(Schedule_LessonCode, Schedule_PresentationCode) REFERENCES Schedules(LessonCode, PresentationCode) ON UPDATE CASCADE ON DELETE CASCADE
