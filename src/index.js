@@ -68,6 +68,12 @@ async function CronReached(event, env, ctx)
       await Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
     }
 
+    // If lesson's time has reached.
+    if(minutes_Left_ToStart === 0)
+    {
+      await Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
+    }
+
     // TODO: Remove.
     /*let testText = `LessonTimeStart: ${scheduleJSON.LessonTimeStart}
     LessonTimeEnd: ${scheduleJSON.LessonTimeEnd}
@@ -80,7 +86,7 @@ async function CronReached(event, env, ctx)
 }
 
 // Function for sending a message to a chat id.
-async function Send_TextMessage(env, chat_id, text, reply_markup, parse_mode = "HTML")
+async function Bot_SendTextMessage(env, chat_id, text, reply_markup, parse_mode = "HTML")
 {
   let messageJSON = 
   {
@@ -99,6 +105,48 @@ async function Send_TextMessage(env, chat_id, text, reply_markup, parse_mode = "
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(messageJSON)
+    }).then(resp => resp.json())
+}
+
+async function Bot_AnswerCallbackQuery(env, callback_query_id, text = "🔵 پردازش شد.", show_alert = true)
+{
+  let answerCallbackQueryJSON = 
+  {
+    callback_query_id,
+    text,
+    show_alert
+  }
+
+  const url = `https://api.telegram.org/bot${env.API_KEY}/answerCallbackQuery`
+  
+  const data = await fetch(url,
+    {
+      method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(answerCallbackQueryJSON)
+    }).then(resp => resp.json())
+}
+
+async function Bot_EditMessageReplyMarkup(env, chat_id, message_id, reply_markup)
+{
+  let editMessageReplyMarkupJSON = 
+  {
+    chat_id,
+    message_id,
+    reply_markup
+  }
+
+  const url = `https://api.telegram.org/bot${env.API_KEY}/editMessageReplyMarkup`
+  
+  const data = await fetch(url,
+    {
+      method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(editMessageReplyMarkupJSON)
     }).then(resp => resp.json())
 }
 
@@ -184,30 +232,32 @@ async function handleRequest(request, env)
     {
       let message = payload.message
 
-      // Route -> Macro Command.
-      if(await Route_MacroCommand(env, message) === true)
+      // Message -> Text (Chat)
+      if(("text" in message) && ("chat" in message) && ("from" in message))
+      {
+        if(await Process_Message_Text_Chat(env, message) === true)
+        {
+          return new Response("OK")
+        }
+      }
+
+      // Prompt message -> bad input command if all message routings fail.
+      await Prompt_Message_BadInputCommand(env, payload.message)
+    }
+
+    // Update -> CallbackQuery
+    if("callback_query" in payload)
+    {
+      let cbQuery = payload.callback_query
+
+      if(await Process_CallbackQuery_Data(env, cbQuery) === true)
       {
         return new Response("OK")
       }
 
-      let chatType = message.chat.type
-
-      if(chatType === "private")
-      {
-        let chatId = message.from.id
-
-        // Route -> Creator.
-        if(await Route_PrivateChat_IsCreator(env, message) === true)
-        {
-          return new Response("OK")
-        }
-
-        // Route -> Private Chat -> New User
-        if(await Route_PrivateChat_NonRegisteredUser(env, message) === true)
-        {
-          return new Response("OK")
-        }
-      }
+      // Answer CallbackQuery -> Internal Error.
+      await Bot_AnswerCallbackQuery(env, cbQuery.id, "🚫 خطای داخلی سیستم به وقوع پیوست.\n⁉ برای این کلید، دستوری تعریف نشده است یا پارامتر اشتباه وجود دارد.\n\n👈 لطفاً با راهبر سیستم تماس بگیرید.")
+      return new Response("OK")
     }
 
     // Update -> Channel Post
@@ -221,14 +271,246 @@ async function handleRequest(request, env)
         return new Response("OK")
       }
     }
-   
-    
-  // Prompt bad input command if all routings fail.
-  await Prompt_BadInputCommand(env, payload.message)
 
   }
 
   return new Response("OK")
+}
+
+async function DB_Get_User(env, userID)
+{
+  const stmt = env.DB.prepare("SELECT * FROM Users WHERE UserID = ?").bind(userID)
+  const { results } = await stmt.all()
+
+  if(results.length === 0)
+  {
+    return null
+  }
+
+  return results[0]
+}
+
+async function DB_Add_User(env, telegramUserJSON)
+{
+  const stmt = env.DB.prepare("INSERT INTO Users(UserID, FirstName, LastName, Username) VALUES(?, ?, ?, ?)").bind(telegramUserJSON.id, telegramUserJSON.first_name, telegramUserJSON.last_name, telegramUserJSON.username)
+  const { success } = await stmt.all()
+
+  return success
+}
+
+async function DB_AddOrGet_User(env, telegramUserJSON)
+{
+  // Check for existing user.
+  let existingUser = await DB_Get_User(env, telegramUserJSON.id)
+  if(existingUser !== null)
+  {
+    return existingUser
+  }
+
+  // Otherwise, add the user to the database.
+  let addNewUserResult = await DB_Add_User(env, telegramUserJSON)
+  // If the reuslt was successful, get the new user and return it.
+  if(addNewUserResult === true)
+  {
+    return await DB_Get_User(env, telegramUserJSON.id)
+  }
+
+  // Return NULL otherwise.
+  return null
+}
+
+async function DB_Get_Schedule(env, lessonCode, presentationCode)
+{
+  const stmt = env.DB.prepare("SELECT * FROM Schedules WHERE LessonCode = ? AND PresentationCode = ?").bind(lessonCode, presentationCode)
+  const { results } = await stmt.all()
+
+  if(results.length === 0)
+  {
+    return null
+  }
+
+  return results[0]
+}
+
+async function DB_Check_Schedule_IsWithinDateTime(env, schedule, dateTime)
+{
+  // Get Shamsi DateTime.
+  let shamsiJSON = System_Get_Shamsi_JSON(dateTime)
+
+  // Check the day of schedule. If it is not today, return false.
+  if(shamsiJSON.shamsi_NameOfDayOfWeek !== schedule.LessonDayOfWeek)
+  {
+    return false
+  }
+
+  // Extract time literals from DB time string.
+  let schedule_Start_TimeLiterals = schedule.LessonTimeStart.match(/(-\d+|\d+)(,\d+)*(\.\d+)*/g)
+  let schedule_End_TimeLiterals = schedule.LessonTimeEnd.match(/(-\d+|\d+)(,\d+)*(\.\d+)*/g)
+  // Calculate required times in minutes from 00:00.
+  let minutesPassedForDate = (shamsiJSON.shamsi_Date.hour() * 60) + shamsiJSON.shamsi_Date.minute()
+  let minutesForStart = (+schedule_Start_TimeLiterals[0] * 60) + +schedule_Start_TimeLiterals[1]
+  let minutesForEnd = (+schedule_End_TimeLiterals[0] * 60) + +schedule_End_TimeLiterals[1]
+
+  // Check if time is witihin schedule time. If not, return false.
+  if((minutesPassedForDate < minutesForStart) || (minutesPassedForDate > minutesForEnd))
+  {
+    return false
+  }
+
+  // Result is OK.
+  return true
+}
+
+async function Bot_DB_UpdateVoteCounts_TeacherPresences(env, telegram_CallbackQuery, cbQueryDB)
+{
+  const stmt_Count_OKs = env.DB.prepare("SELECT COUNT(*) FROM CallbackQueries WHERE Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ? AND Submission_Result = ?").bind(cbQueryDB.Schedule_LessonCode, cbQueryDB.Schedule_PresentationCode, cbQueryDB.Submission_Date, "Teacher Presence", "OK")
+  const db_Count_OKs = +((await stmt_Count_OKs.raw())[0][0])
+  const stmt_Count_NOKs = env.DB.prepare("SELECT COUNT(*) FROM CallbackQueries WHERE Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ? AND Submission_Result = ?").bind(cbQueryDB.Schedule_LessonCode, cbQueryDB.Schedule_PresentationCode, cbQueryDB.Submission_Date, "Teacher Presence", "NOK")
+  const db_Count_NOKs = +((await stmt_Count_NOKs.raw())[0][0])
+  const stmt_Count_DELAYs = env.DB.prepare("SELECT COUNT(*) FROM CallbackQueries WHERE Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ? AND Submission_Result = ?").bind(cbQueryDB.Schedule_LessonCode, cbQueryDB.Schedule_PresentationCode, cbQueryDB.Submission_Date, "Teacher Presence", "DELAY")
+  const db_Count_DELAYs = +((await stmt_Count_DELAYs.raw())[0][0])
+
+  let inlineKeyboard_NewVoteCounts = {
+    inline_keyboard: [
+      [ 
+        { text: `👍 (${db_Count_OKs})`, callback_data: `SCH_OK_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }, 
+        { text: `👎 (${db_Count_NOKs})`, callback_data: `SCH_NOK_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` },
+        { text: `⏳ (${db_Count_DELAYs})`, callback_data: `SCH_DELAY_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }
+      ]
+    ]
+  }
+
+  // console.log(telegram_CallbackQuery.message.chat.id)
+
+  await Bot_EditMessageReplyMarkup(env, telegram_CallbackQuery.message.chat.id, telegram_CallbackQuery.message.message_id, inlineKeyboard_NewVoteCounts)
+}
+
+async function DB_Get_CallbackQuery_Schedule(env, userID, scheduleLessonCode, schedulePresentationCode, submissionDate_String, submission_Reason)
+{
+  const stmt = env.DB.prepare("SELECT * FROM CallbackQueries WHERE From_UserID = ? AND Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ?").bind(userID, scheduleLessonCode, schedulePresentationCode, submissionDate_String, submission_Reason)
+  const { results } = await stmt.all()
+
+  if(results.length == 0)
+  {
+    return null
+  }
+
+  return results[0]
+}
+
+async function DB_Write_CallbackQuery_Schedule(env, user, callback_query)
+{
+  // Check expected tokens length.
+  let tokens = callback_query.data.split('_')
+  if((tokens.length != 4) || (tokens[0] !== "SCH"))
+  {
+    return false
+  }
+
+  // Get schedule.
+  let schedule = await DB_Get_Schedule(env, tokens[2], tokens[3])
+  if(schedule === null)
+  {
+    return false
+  }
+
+  // Check if schedule has arrived and the user can submit their response.
+  if(await DB_Check_Schedule_IsWithinDateTime(env, schedule, new Date()) === false)
+  {
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "❌ فقط در بازه زمانی برگزاری کلاس می‌توانید رأی خود را ثبت کنید.")
+    return true
+  }
+
+  // Check if the user had previously submitted schedule result. If submitted, deny user.
+  let previousSubmittedCBQuery = await DB_Get_CallbackQuery_Schedule(env, user.UserID, schedule.LessonCode, schedule.PresentationCode, System_Get_Shamsi_Date_String(new Date()), "Teacher Presence")
+  if(previousSubmittedCBQuery != null)
+  {
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "❌ فقط یک بار می‌توانید رأی خود را ثبت کنید.")
+
+    // Update vote counts.
+    await Bot_DB_UpdateVoteCounts_TeacherPresences(env, callback_query, previousSubmittedCBQuery)
+    
+    return true
+  }
+
+  // Write new submitted callback query.
+  const stmt = env.DB.prepare("INSERT INTO CallbackQueries VALUES(?, ?, ?, ?, ?, ?, ?)").bind(callback_query.id, user.UserID, schedule.LessonCode, schedule.PresentationCode, System_Get_Shamsi_Date_String(new Date()), "Teacher Presence", tokens[1])
+  const { success } = await stmt.all()
+
+  // Answer the callback query finally.
+  if(success === true)
+  {
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "✅ رأی شما با موفقیت ثبت شد.")
+
+    // Update vote counts.
+    let newWrittenCB = await DB_Get_CallbackQuery_Schedule(env, user.UserID, schedule.LessonCode, schedule.PresentationCode, System_Get_Shamsi_Date_String(new Date()), "Teacher Presence")
+    await Bot_DB_UpdateVoteCounts_TeacherPresences(env, callback_query, newWrittenCB)
+  }
+  else
+  {
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "🚫 خطا در ارتباط با پایگاه داده جهت ثبت رأی.\n\n👈 لطفاً با راهبر بات تماس بگیرید.")
+  }
+
+  return true
+}
+
+async function Process_CallbackQuery_Data(env, callback_query)
+{
+  let cbQuery_Id = callback_query.id
+  let cbQuery_Tokens = callback_query.data.split('_')
+
+  // Get the user who has requested this callback query.
+  let cbQuery_User = await DB_AddOrGet_User(env, callback_query.from)
+
+  // If query does not contain any data, cancel this routing.
+  if(cbQuery_Tokens.length == 0)
+  {
+    return false
+  }
+
+  // If the user is not allowed to work with callback queries.
+  if(cbQuery_User.Can_Use_CallbackQueries === false)
+  {
+    await Bot_AnswerCallbackQuery(env, cbQuery_Id, "⛔ شما مجاز به تعامل با بات نمی‌باشید.\n\n👈 لطفاً با راهبر بات تماس بگیرید.")
+    return true
+  }
+
+  // SCH -> Schedules.
+  if(cbQuery_Tokens[0] === "SCH")
+  {
+    // Write schedule data to DB.
+    await DB_Write_CallbackQuery_Schedule(env, cbQuery_User, callback_query)
+  }
+
+  return false
+}
+
+async function Process_Message_Text_Chat(env, message)
+{
+  // Route -> Macro Command.
+  if(await Route_MacroCommand(env, message) === true)
+  {
+    return true
+  }
+
+  let chatType = message.chat.type
+
+  if(chatType === "private")
+  {
+    let chatId = message.from.id
+
+    // Route -> Creator.
+    if(await Route_PrivateChat_IsCreator(env, message) === true)
+    {
+      return true
+    }
+
+    // Route -> Private Chat -> New User
+    if(await Route_PrivateChat_NonRegisteredUser(env, message) === true)
+    {
+      return true
+    }
+  }
 }
 
 // Handler -> Macro command.
@@ -245,7 +527,7 @@ async function Route_MacroCommand(env, message)
     {
       let prompt_ChatIdText = `☁ شماره انحصاری این چت:\n<code>${message.chat.id}</code>`
     
-      await Send_TextMessage(env, message.chat.id, prompt_ChatIdText, {})
+      await Bot_SendTextMessage(env, message.chat.id, prompt_ChatIdText, {})
 
       return true
     }
@@ -256,11 +538,11 @@ async function Route_MacroCommand(env, message)
       if("from" in message)
       {
         let prompt_UserIdText = `🔑 شماره انحصاری نشست کاربری:\n<code>${message.from.id}</code>`
-        await Send_TextMessage(env, message.chat.id, prompt_UserIdText, {})
+        await Bot_SendTextMessage(env, message.chat.id, prompt_UserIdText, {})
       }
       else
       {
-        await Send_TextMessage(env, message.chat.id, "🚫 شماره نشست کاربری فقط از طریق ارسال پیام خصوصی به بات امکان‌پذیر می‌باشد.", {})
+        await Bot_SendTextMessage(env, message.chat.id, "🚫 شماره نشست کاربری فقط از طریق ارسال پیام خصوصی به بات امکان‌پذیر می‌باشد.", {})
       }
 
       return true
@@ -278,14 +560,14 @@ async function Route_MacroCommand(env, message)
         // If input channel is not a number...
         if(isNaN(channelID) === true)
         {
-          await Send_TextMessage(env, message.chat.id, "❌ مقدار شماره کانال تنظیم شده معتبر نیست.\n\n👈 از /start استفاده کنید.")
+          await Bot_SendTextMessage(env, message.chat.id, "❌ مقدار شماره کانال تنظیم شده معتبر نیست.\n\n👈 از /start استفاده کنید.")
           return true
         }
 
         // Send a test message to specified channel.
         let promptText_TestMessage = `✅ پیام تست ارسال شده.\n\n👈 از طرف:  <b>${message.from.first_name}</b>\n📅 تاریخ: <b>${System_GetDateTime_NumericPersianString(new Date())}</b>`
-        await Send_TextMessage(env, channelID, promptText_TestMessage, {})
-        await Send_TextMessage(env, message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
+        await Bot_SendTextMessage(env, channelID, promptText_TestMessage, {})
+        await Bot_SendTextMessage(env, message.chat.id, `✅ پیام تست با موفقیت ارسال شد.\n\n⚠ <i>در صورت عدم مشاهده پیام، یعنی بات را به کانال اضافه نکرده‌اید یا دسترسی ارسال پیام بات در کانال را بسته‌اید.</i>`, {})
 
         return true
       }
@@ -421,7 +703,7 @@ async function Route_PrivateChat_NonRegisteredUser(env, message)
       is_persistent: true
     }
 
-    await Send_TextMessage(env, message.chat.id, text_WelcomeMenu, replyMarkup_WelcomeMenuKeyboard)
+    await Bot_SendTextMessage(env, message.chat.id, text_WelcomeMenu, replyMarkup_WelcomeMenuKeyboard)
 
     return true
   }
@@ -429,14 +711,21 @@ async function Route_PrivateChat_NonRegisteredUser(env, message)
   return false
 }
 
-async function Prompt_BadInputCommand(env, message)
+async function Prompt_Message_BadInputCommand(env, message)
 {
+  if(message === undefined)
+  {
+    return
+  }
 
   let text_BadInput = `🚫 دستور وارد شده در این لحظه قابل پردازش نیست.
   
   👈 می‌توانید از /start استفاده کنید.`
 
-  await Send_TextMessage(env, message.chat.id, text_BadInput, {})
+  if("chat" in message)
+  {
+    await Bot_SendTextMessage(env, message.chat.id, text_BadInput, {})
+  }
 }
 
 async function Prompt_Creator_SetChannel(env, message)
@@ -449,7 +738,7 @@ async function Prompt_Creator_SetChannel(env, message)
   
   👇 حال، می‌توانید با وارد کردن شماره چت کانال جدید، آن را جهت اطلاع رسانی بات تنظیم کنید.`
 
-  await Send_TextMessage(env, message.chat.id, promptText_SetChannel, { keyboard: [[{ text: "❌ حذف کانال تنظیم شده فعلی در صورت وجود" }], [{text: "🔙 بازگشت به منوی قبلی"}]]})
+  await Bot_SendTextMessage(env, message.chat.id, promptText_SetChannel, { keyboard: [[{ text: "❌ حذف کانال تنظیم شده فعلی در صورت وجود" }], [{text: "🔙 بازگشت به منوی قبلی"}]]})
 }
 
 async function Prompt_SetAnnouncementChannel(env, message, newChannelID)
@@ -462,7 +751,7 @@ async function Prompt_SetAnnouncementChannel(env, message, newChannelID)
   
   <i><b>⚠ در صورت بروز هر گونه اشکال، می‌توانید از دستور /help استفاده کنید.</b></i>`
 
-  await Send_TextMessage(env, message.chat.id, prompt_SetChannelID, { remove_keyboard: true })
+  await Bot_SendTextMessage(env, message.chat.id, prompt_SetChannelID, { remove_keyboard: true })
 }
 
 async function Prompt_Creator_MainMenu(env, message)
@@ -480,14 +769,14 @@ async function Prompt_Creator_MainMenu(env, message)
                 is_persistent: true
               }
           
-    await Send_TextMessage(env, message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
+    await Bot_SendTextMessage(env, message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
 }
 
 async function Prompt_RemovedAnnouncementChannelID(env, message)
 {
   let promptText_RemovedChannel = `☑ کانال با موفقیت حذف شد.`
 
-  await Send_TextMessage(env, message.chat.id, promptText_RemovedChannel, {})
+  await Bot_SendTextMessage(env, message.chat.id, promptText_RemovedChannel, {})
 }
 
 function System_GetDateTime_NumericPersianString(date)
@@ -568,5 +857,38 @@ async function Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
 🙏 از دانشجویان محترم تقاضا می‌شود تا رأس ساعت مقرر سر کلاس حاضر شوند.
 ⚠ <b><i>در صورت هماهنگی عدم تشکیل کلاس توسط استاد، مراتب را به آموزش گروه کامپیوتر اطلاع دهید.</i></b>`
 
-  await Send_TextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleIsAboutToStart, {})
+  await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleIsAboutToStart, {})
+}
+
+async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
+{
+  let promptText_ScheduleStarted = `⭐ #اعلان
+
+🏛 کلاس درس <b>${scheduleJSON.LessonName}</b> با کد درس <b>${scheduleJSON.LessonCode}</b> و کد ارائه <b>${scheduleJSON.PresentationCode}</b> توسط استاد محترم <b>${scheduleJSON.ProfessorName}</b> در کلاس <b>${scheduleJSON.RoomName}</b> امروز <u>${scheduleJSON.LessonDayOfWeek}</u> رأس ساعت <b>${scheduleJSON.LessonTimeStart}</b> شروع شده است.
+
+⌛ دانشجویان باید بر اساس تعداد واحدهای درسی، مدت زمانی را منتظر استاد باشند.
+
+👍 در صورت حضور استاد در کلاس، بر روی لایک کلیک کنید.
+👎 در صورت عدم حضور استاد در کلاس پس از موعد مقرر یا هماهنگی قبلی، بر روی دیسلایک کلیک کنید.
+⏳ در صورت حضور استاد پس از میزان تأخیر قابل توجه، بر روی ساعت شنی کلیک کنید.
+
+⚠ <b>توجه:  مسئولیت گزارش دروغ بر عهده دانشجو خواهد بود و شخص خاطی، به کمیته انضباطی معرفی خواهد شد.</b>`
+
+  let replyMarkup_InlineButtons = {
+    inline_keyboard: [
+      [ 
+        { text: "👍 (0)", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+        { text: "👎 (0)", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
+        { text: "⏳ (0)", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+      ]
+    ]
+  }
+
+  await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
+}
+
+function System_Get_Shamsi_Date_String(gregorianDate)
+{
+  let shamsiJSON = System_Get_Shamsi_JSON(gregorianDate)
+  return `${shamsiJSON.shamsi_Date.format("YYYY")}-${shamsiJSON.shamsi_Date.format("MM")}-${shamsiJSON.shamsi_Date.format("DD")}`
 }
