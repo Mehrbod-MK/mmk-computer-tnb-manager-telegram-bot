@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS Channels (
 /*************************************************/
 
 /**************** TABLE: SCHEDULES ****************/
-/* DROP TABLE IF EXISTS Schedules; */
+DROP TABLE IF EXISTS Schedules;
 CREATE TABLE IF NOT EXISTS Schedules(
     LessonCode VARCHAR(25) NOT NULL,
     PresentationCode VARCHAR(25) NOT NULL,
@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS Schedules(
     LessonDayOfWeek VARCHAR(15) NOT NULL DEFAULT "نامعین",
     LessonTimeStart VARCHAR(20) NOT NULL,
     LessonTimeEnd VARCHAR(20) NOT NULL,
+
+    LessonEducationStage VARCHAR(50) NOT NULL,
 
     PRIMARY KEY(LessonCode, PresentationCode),
 

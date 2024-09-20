@@ -852,7 +852,7 @@ async function Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
 {
   let promptText_ScheduleIsAboutToStart = `🔔 #یادآوری
 
-🏛 کلاس درس <b>${scheduleJSON.LessonName}</b> با کد درس <b>${scheduleJSON.LessonCode}</b> و کد ارائه <b>${scheduleJSON.PresentationCode}</b> توسط استاد محترم <b>${scheduleJSON.ProfessorName}</b> در کلاس <b>${scheduleJSON.RoomName}</b> امروز <u>${scheduleJSON.LessonDayOfWeek}</u> رأس ساعت <b>${scheduleJSON.LessonTimeStart}</b> طبق تقویم دانشگاهی برگزار خواهد شد و تا <b>${scheduleJSON.LessonTimeEnd}</b> ادامه خواهد داشت.
+🏛 کلاس درس <b>${scheduleJSON.LessonName}</b> با کد درس <b>${scheduleJSON.LessonCode}</b> و کد ارائه <b>${scheduleJSON.PresentationCode}</b> در مقطع <b>${scheduleJSON.LessonEducationStage}</b> توسط استاد محترم <b>${scheduleJSON.ProfessorName}</b> در کلاس <b>${scheduleJSON.RoomName}</b> امروز <u>${scheduleJSON.LessonDayOfWeek}</u> رأس ساعت <b>${scheduleJSON.LessonTimeStart}</b> طبق تقویم دانشگاهی برگزار خواهد شد و تا <b>${scheduleJSON.LessonTimeEnd}</b> ادامه خواهد داشت.
 
 🙏 از دانشجویان محترم تقاضا می‌شود تا رأس ساعت مقرر سر کلاس حاضر شوند.
 ⚠ <b><i>در صورت هماهنگی عدم تشکیل کلاس توسط استاد، مراتب را به آموزش گروه کامپیوتر اطلاع دهید.</i></b>`
@@ -864,7 +864,7 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
 {
   let promptText_ScheduleStarted = `⭐ #اعلان
 
-🏛 کلاس درس <b>${scheduleJSON.LessonName}</b> با کد درس <b>${scheduleJSON.LessonCode}</b> و کد ارائه <b>${scheduleJSON.PresentationCode}</b> توسط استاد محترم <b>${scheduleJSON.ProfessorName}</b> در کلاس <b>${scheduleJSON.RoomName}</b> امروز <u>${scheduleJSON.LessonDayOfWeek}</u> رأس ساعت <b>${scheduleJSON.LessonTimeStart}</b> شروع شده است.
+🏛 کلاس درس <b>${scheduleJSON.LessonName}</b> با کد درس <b>${scheduleJSON.LessonCode}</b> و کد ارائه <b>${scheduleJSON.PresentationCode}</b> در مقطع <b>${scheduleJSON.LessonEducationStage}</b> توسط استاد محترم <b>${scheduleJSON.ProfessorName}</b> در کلاس <b>${scheduleJSON.RoomName}</b> امروز <u>${scheduleJSON.LessonDayOfWeek}</u> رأس ساعت <b>${scheduleJSON.LessonTimeStart}</b> شروع شده است.
 
 ⌛ دانشجویان باید بر اساس تعداد واحدهای درسی، مدت زمانی را منتظر استاد باشند.
 
