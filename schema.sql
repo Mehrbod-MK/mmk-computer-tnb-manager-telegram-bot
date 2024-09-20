@@ -79,3 +79,7 @@ CREATE TABLE IF NOT EXISTS CallbackQueries(
     FOREIGN KEY(Schedule_LessonCode, Schedule_PresentationCode) REFERENCES Schedules(LessonCode, PresentationCode) ON UPDATE CASCADE ON DELETE CASCADE
 );
 /*********************************************************/
+
+/********************************** SCHEDULES - 4031 **********************************/
+/*INSERT INTO Schedules VALUES("7000009129", "03-131*", "ارزیابی کارایی سیستم ها و شبکه های کامپیوتری", "مهدی امینیان", "A217", "چهارشنبه", "18:00", "20:20", "ارشد");*/
+/**************************************************************************************/
