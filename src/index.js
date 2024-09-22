@@ -65,23 +65,17 @@ async function CronReached(event, env, ctx)
     let minutes_Left_ToStart = minutesForStart - minutesPassedToday
     if(minutes_Left_ToStart === threshold_Minutes_BeforeStartingSchedule)
     {
-      await Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
+      // DR ALIMOHAMMADZADE: No need for reminder.
+      // await Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
     }
 
     // If lesson's time has reached.
-    if(minutes_Left_ToStart === 0)
+    // if(minutes_Left_ToStart === 0)
+    // DR ALIMOHAMMADZADE:  Announce 1 hour beforehand.
+    if(minutes_Left_ToStart == 60)
     {
       await Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
     }
-
-    // TODO: Remove.
-    /*let testText = `LessonTimeStart: ${scheduleJSON.LessonTimeStart}
-    LessonTimeEnd: ${scheduleJSON.LessonTimeEnd}
-    
-    minutesPassedToday: ${minutesPassedToday}
-    minutesForStart: ${minutesForStart}
-    minutesForEnd: ${minutesForEnd}`
-    await Send_TextMessage(env, 146995203, testText, {})*/
   }
 }
 
@@ -862,7 +856,7 @@ async function Prompt_Channel_ScheduleIsAboutToStart(env, scheduleJSON)
 
 async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
 {
-  let promptText_ScheduleStarted = `⭐ #اعلان
+  /*let promptText_ScheduleStarted = `⭐ #اعلان
 
 🏛 کلاس درس <b>${scheduleJSON.LessonName}</b> با کد درس <b>${scheduleJSON.LessonCode}</b> و کد ارائه <b>${scheduleJSON.PresentationCode}</b> در مقطع <b>${scheduleJSON.LessonEducationStage}</b> توسط استاد محترم <b>${scheduleJSON.ProfessorName}</b> در کلاس <b>${scheduleJSON.RoomName}</b> امروز <u>${scheduleJSON.LessonDayOfWeek}</u> رأس ساعت <b>${scheduleJSON.LessonTimeStart}</b> شروع شده است.
 
@@ -872,7 +866,17 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
 👎 در صورت عدم حضور استاد در کلاس پس از موعد مقرر یا هماهنگی قبلی، بر روی دیسلایک کلیک کنید.
 ⏳ در صورت حضور استاد پس از میزان تأخیر قابل توجه، بر روی ساعت شنی کلیک کنید.
 
-⚠ <b>توجه:  مسئولیت گزارش دروغ بر عهده دانشجو خواهد بود و شخص خاطی، به کمیته انضباطی معرفی خواهد شد.</b>`
+⚠ <b>توجه:  مسئولیت گزارش دروغ بر عهده دانشجو خواهد بود و شخص خاطی، به کمیته انضباطی معرفی خواهد شد.</b>`*/
+
+// DR ALIMOHAMMADZADE:  New message.
+
+let promptText_ScheduleStarted = `⭐ #اعلان
+
+👈 کلاس درس <b>#${scheduleJSON.LessonName}</b> استاد <b>#${scheduleJSON.ProfessorName}</b> روز <u>#${scheduleJSON.LessonDayOfWeek}</u> در اتاق <b>#${scheduleJSON.RoomName}</b> تا 1 ساعت دیگر برگزار خواهد شد.
+
+👍 حضور استاد
+👎 عدم حضور استاد
+⏳ تأخیر استاد`
 
   let replyMarkup_InlineButtons = {
     inline_keyboard: [
