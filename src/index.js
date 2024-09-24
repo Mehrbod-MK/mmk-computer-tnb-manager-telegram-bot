@@ -286,10 +286,26 @@ async function DB_Get_User(env, userID)
 
 async function DB_Add_User(env, telegramUserJSON)
 {
-  const stmt = env.DB.prepare("INSERT INTO Users(UserID, FirstName, LastName, Username) VALUES(?, ?, ?, ?)").bind(telegramUserJSON.id, telegramUserJSON.first_name, telegramUserJSON.last_name, telegramUserJSON.username)
-  const { success } = await stmt.all()
-
-  return success
+  console.log(telegramUserJSON)
+  let stmt = null;
+  if("last_name" in telegramUserJSON && "username" in telegramUserJSON)
+  {
+    stmt = env.DB.prepare("INSERT INTO Users(UserID, FirstName, LastName, Username) VALUES(?, ?, ?, ?)").bind(telegramUserJSON.id, telegramUserJSON.first_name, telegramUserJSON.last_name, telegramUserJSON.username)
+  }
+  else if("username" in telegramUserJSON)
+  {
+    stmt = env.DB.prepare("INSERT INTO Users(UserID, FirstName, Username) VALUES(?, ?, ?)").bind(telegramUserJSON.id, telegramUserJSON.first_name, telegramUserJSON.username)
+  }
+  else if("last_name" in telegramUserJSON)
+  {
+    stmt = env.DB.prepare("INSERT INTO Users(UserID, FirstName, LastName) VALUES(?, ?, ?)").bind(telegramUserJSON.id, telegramUserJSON.first_name, telegramUserJSON.last_name)
+  }
+  if(stmt !== null)
+  {
+    const { success } = await stmt.all()
+    return success
+  }
+  return false;
 }
 
 async function DB_AddOrGet_User(env, telegramUserJSON)
@@ -868,15 +884,21 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
 
 ⚠ <b>توجه:  مسئولیت گزارش دروغ بر عهده دانشجو خواهد بود و شخص خاطی، به کمیته انضباطی معرفی خواهد شد.</b>`*/
 
-// DR ALIMOHAMMADZADE:  New message.
+// DR ALIMOHAMMADZADE:  New message. + REMOVE MARKUPS.
 
 let promptText_ScheduleStarted = `⭐ #اعلان
 
-👈 کلاس درس <b>#${scheduleJSON.LessonName}</b> استاد <b>#${scheduleJSON.ProfessorName}</b> روز <u>#${scheduleJSON.LessonDayOfWeek}</u> در اتاق <b>#${scheduleJSON.RoomName}</b> تا 1 ساعت دیگر برگزار خواهد شد.
+📚 #${scheduleJSON.LessonName.replace(' ', '_')}
 
-👍 حضور استاد
-👎 عدم حضور استاد
-⏳ تأخیر استاد`
+🌟 استاد #${scheduleJSON.ProfessorName.replace(' ', '_')}
+
+🏛 اتاق #${scheduleJSON.RoomName.replace(' ', '_')}
+📅 روز #${scheduleJSON.LessonDayOfWeek.replace(' ', '_')}
+⌚ ساعت ${scheduleJSON.LessonTimeStart} تا ${scheduleJSON.LessonTimeEnd}`
+
+/*👍 = حضور استاد
+👎 = عدم حضور استاد
+⏳ = تأخیر استاد*/
 
   let replyMarkup_InlineButtons = {
     inline_keyboard: [
@@ -888,7 +910,10 @@ let promptText_ScheduleStarted = `⭐ #اعلان
     ]
   }
 
-  await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
+
+  // DR ALIMOHAMMADZADE:  Disable callback buttons.
+  // await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
+  await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, {})
 }
 
 function System_Get_Shamsi_Date_String(gregorianDate)
