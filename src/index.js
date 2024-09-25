@@ -982,6 +982,8 @@ let promptText_ScheduleStarted = `⭐ #اعلان
 📅 روز #${scheduleJSON.LessonDayOfWeek.replaceAll(' ', '_')}
 ⌚ ساعت ${scheduleJSON.LessonTimeStart} تا ${scheduleJSON.LessonTimeEnd}
 
+📝 توضیحات: ${scheduleJSON.LessonDescriptions === "" ? "<i>بدون توضیحات</i>" : scheduleJSON.LessonDescriptions}
+
 👍 = حضور استاد
 👎 = عدم حضور استاد
 ⏳ = تأخیر استاد`
