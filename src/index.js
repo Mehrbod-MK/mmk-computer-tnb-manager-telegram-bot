@@ -75,7 +75,9 @@ async function CronReached(event, env, ctx)
     // If lesson's time has reached.
     // if(minutes_Left_ToStart === 0)
     // DR ALIMOHAMMADZADE:  Announce 1 hour beforehand.
-    if(minutes_Left_ToStart == 60)
+    // TODO: Uncomment.
+    // if(minutes_Left_ToStart == 60)
+    if(minutes_Left_ToStart == 0)
     {
       await Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
     }
@@ -395,13 +397,17 @@ async function Bot_DB_UpdateVoteCounts_TeacherPresences(env, telegram_CallbackQu
     inline_keyboard: [
       [ 
         { text: `👍 (${db_Count_OKs})`, callback_data: `SCH_OK_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }, 
-        { text: `👎 (${db_Count_NOKs})`, callback_data: `SCH_NOK_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` },
-        { text: `⏳ (${db_Count_DELAYs})`, callback_data: `SCH_DELAY_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }
+        { text: `👎`, callback_data: `SCH_NOK_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` },
+        { text: `⏳`, callback_data: `SCH_DELAY_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }
+      ],
+      [
+        { text: "💬 ثبت نظر", callback_data: `SCH_COMNT_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }
+      ],
+      [
+        { text: "🗝 پنل کنترل درس", callback_data: `SCH_ADMIN_${cbQueryDB.Schedule_LessonCode}_${cbQueryDB.Schedule_PresentationCode}` }
       ]
     ]
   }
-
-  // console.log(telegram_CallbackQuery.message.chat.id)
 
   await Bot_EditMessageReplyMarkup(env, telegram_CallbackQuery.message.chat.id, telegram_CallbackQuery.message.message_id, inlineKeyboard_NewVoteCounts)
 }
@@ -991,7 +997,7 @@ let promptText_ScheduleStarted = `⭐ #اعلان
   let replyMarkup_InlineButtons = {
     inline_keyboard: [
       [ 
-        { text: "👍", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+        { text: "👍 (0)", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
         { text: "👎", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
         { text: "⏳", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
       ],
@@ -1050,7 +1056,7 @@ async function Prompt_InlineButtons_Schedule_Display(env, callback_query, schedu
       let replyMarkup_ScheduleButtons = {
         inline_keyboard: [
           [ 
-            { text: "👍", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+            { text: `👍 ${await DB_Get_Schedule_Votes_Count(env, scheduleJSON, new Date(), "Teacher Presence", "OK")}`, callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
             { text: "👎", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
             { text: "⏳", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
           ],
