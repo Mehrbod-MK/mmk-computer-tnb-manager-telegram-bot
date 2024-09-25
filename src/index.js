@@ -888,12 +888,12 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
 
 let promptText_ScheduleStarted = `⭐ #اعلان
 
-📚 #${scheduleJSON.LessonName.replace(' ', '_')}
+📚 #${scheduleJSON.LessonName.replaceAll(' ', '_')}
 
-🌟 استاد #${scheduleJSON.ProfessorName.replace(' ', '_')}
+🌟 استاد #${scheduleJSON.ProfessorName.replaceAll(' ', '_')}
 
-🏛 اتاق #${scheduleJSON.RoomName.replace(' ', '_')}
-📅 روز #${scheduleJSON.LessonDayOfWeek.replace(' ', '_')}
+🏛 اتاق #${scheduleJSON.RoomName.replaceAll(' ', '_')}
+📅 روز #${scheduleJSON.LessonDayOfWeek.replaceAll(' ', '_')}
 ⌚ ساعت ${scheduleJSON.LessonTimeStart} تا ${scheduleJSON.LessonTimeEnd}`
 
 /*👍 = حضور استاد
