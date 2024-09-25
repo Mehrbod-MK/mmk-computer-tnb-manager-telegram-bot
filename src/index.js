@@ -75,7 +75,9 @@ async function CronReached(event, env, ctx)
     // If lesson's time has reached.
     // if(minutes_Left_ToStart === 0)
     // DR ALIMOHAMMADZADE:  Announce 1 hour beforehand.
-    if(minutes_Left_ToStart == 60)
+    // TODO: Uncomment.
+    // if(minutes_Left_ToStart == 60)
+    if(minutes_Left_ToStart == 0)
     {
       await Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
     }
