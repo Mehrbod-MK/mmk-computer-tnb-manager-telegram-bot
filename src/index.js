@@ -75,7 +75,9 @@ async function CronReached(event, env, ctx)
     // If lesson's time has reached.
     // if(minutes_Left_ToStart === 0)
     // DR ALIMOHAMMADZADE:  Announce 1 hour beforehand.
-    if(minutes_Left_ToStart == 60)
+    // TODO: Uncomment.
+    // if(minutes_Left_ToStart == 60)
+    if(minutes_Left_ToStart == 0)
     {
       await Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
     }
@@ -468,6 +470,14 @@ async function Process_CallbackQuery_Display(env, user, callback_query)
     return true
   }
 
+  // Admin -> View Schedule Comments.
+  else if(tokens[1] === "COMNTS")
+  {
+    // TODO: Develop.
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "☁ این قسمت در حال توسعه است...")
+    return true
+  }
+
   // Admin -> Exit Panel.
   else if(tokens[1] === "SCH")
   {
@@ -493,7 +503,7 @@ async function Process_CallbackQuery_Schedule(env, user, callback_query)
     return false
   }
 
-  // SCH -> Admin Panel
+  // SCH -> Admin -> Panel
   if(tokens[1] == "ADMIN")
   {
     // Check if user is not an admin.
@@ -505,6 +515,14 @@ async function Process_CallbackQuery_Schedule(env, user, callback_query)
 
     // Display new admin control buttons for schedule.
     return Prompt_InlineButtons_Schedule_AdminPanel(env, callback_query, schedule)
+  }
+
+  // SCH -> User -> Comment.
+  else if(tokens[1] === "COMNT")
+  {
+    // TODO: Develop.
+    await Bot_AnswerCallbackQuery(env, callback_query.id, "☁ این قسمت در حال توسعه است...")
+    return true
   }
 
   // Check if schedule has arrived and the user can submit their response.
