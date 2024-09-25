@@ -438,6 +438,13 @@ async function Process_CallbackQuery_Display(env, user, callback_query)
   // Admin -> View Votes.
   if(tokens[1] === "VOTES")
   {
+    // If not an admin, don't display vote counts.
+    if(await IsAdmin(env, callback_query.from.id) === false)
+    {
+      await Bot_AnswerCallbackQuery(env, callback_query.id, MESSAGE_RESTRICTED_ACCESS)
+      return true
+    }
+
     // Get votes count.
     let dateTimeNow = new Date()
     let votes_OK = await DB_Get_Schedule_Votes_Count(env, schedule, dateTimeNow, "Teacher Presence", "OK")
@@ -455,6 +462,12 @@ async function Process_CallbackQuery_Display(env, user, callback_query)
     await Bot_AnswerCallbackQuery(env, callback_query.id, toastText_VotesResults)
 
     return true
+  }
+
+  // Admin -> Exit Panel.
+  else if(tokens[1] === "SCH")
+  {
+    return await Prompt_InlineButtons_Schedule_Display(env, callback_query, schedule)
   }
 
   return false
@@ -479,8 +492,8 @@ async function Process_CallbackQuery_Schedule(env, user, callback_query)
   // SCH -> Admin Panel
   if(tokens[1] == "ADMIN")
   {
-    // Check if user is admin.
-    if(IsAdmin(env, user) === false)
+    // Check if user is not an admin.
+    if(await IsAdmin(env, callback_query.from.id) === false)
     {
       await Bot_AnswerCallbackQuery(env, callback_query.id, MESSAGE_RESTRICTED_ACCESS)
       return true
@@ -1048,7 +1061,7 @@ async function Prompt_InlineButtons_Schedule_Display(env, callback_query, schedu
         ]
       }
   
-      await Bot_EditMessageReplyMarkup(env, callback_query.message.chat.id, callback_query.message.message_id, replyMarkup_AdminButtons)
+      await Bot_EditMessageReplyMarkup(env, callback_query.message.chat.id, callback_query.message.message_id, replyMarkup_ScheduleButtons)
       await Bot_AnswerCallbackQuery(env, callback_query.id, `بازگشت به پنل درس.`, false)
   
       return true
