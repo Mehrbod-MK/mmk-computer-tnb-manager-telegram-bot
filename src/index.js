@@ -1054,7 +1054,7 @@ async function Prompt_InlineButtons_Schedule_Display(env, callback_query, schedu
       let replyMarkup_ScheduleButtons = {
         inline_keyboard: [
           [ 
-            { text: `👍 ${await DB_Get_Schedule_Votes_Count(env, scheduleJSON, new Date(), "Teacher Presence", "OK")}`, callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+            { text: `👍 (${await DB_Get_Schedule_Votes_Count(env, scheduleJSON, new Date(), "Teacher Presence", "OK")})`, callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
             { text: "👎", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
             { text: "⏳", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
           ],
