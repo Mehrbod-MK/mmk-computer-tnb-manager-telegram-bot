@@ -20,7 +20,7 @@ let users = []
 
 // STATE DEFINITIONS.
 const STATE_USER_INITIAL = 0
-const STATE_CREATOR_SETTING_CHANNEL = 1
+const STATE_ADMIN_SETTING_CHANNEL = 1
 
 // STRING DEFINITIONS
 const MESSAGE_RESTRICTED_ACCESS = "⛔ شما مجاز به دسترسی به این قسمت نمی‌باشید."
@@ -274,6 +274,19 @@ async function handleRequest(request, env)
   }
 
   return new Response("OK")
+}
+
+async function DB_Get_Admin(env, userID)
+{
+  const stmt = env.DB.prepare("SELECT * FROM Admins WHERE ChatID = ?").bind(userID)
+  const { results } = await stmt.all()
+
+  if(results.length === 0)
+  {
+    return null
+  }
+
+  return results[0]
 }
 
 async function DB_Get_User(env, userID)
@@ -618,8 +631,8 @@ async function Process_Message_Text_Chat(env, message)
   {
     let chatId = message.from.id
 
-    // Route -> Creator.
-    if(await Route_PrivateChat_IsCreator(env, message) === true)
+    // Route -> Admin.
+    if(await Route_PrivateChat_IsAdmin(env, message) === true)
     {
       return true
     }
@@ -704,11 +717,11 @@ async function Route_MacroCommand(env, message)
           switch(admin_State)
           {
             case STATE_USER_INITIAL:
-              await Prompt_Creator_MainMenu(env, message)
+              await Prompt_Admin_MainMenu(env, message)
               return true
 
-            case STATE_CREATOR_SETTING_CHANNEL:
-              await Prompt_Creator_SetChannel(env, message)
+            case STATE_ADMIN_SETTING_CHANNEL:
+              await Prompt_Admin_SetChannel(env, message)
               return true
           }
         }
@@ -719,29 +732,29 @@ async function Route_MacroCommand(env, message)
   return false
 }
 
-// Handler -> Private Chat - Is Creator
-async function Route_PrivateChat_IsCreator(env, message)
+// Handler -> Private Chat - Is Admin
+async function Route_PrivateChat_IsAdmin(env, message)
 {
   if(await IsAdmin(env, message.from.id) === true)
   {
-    let admin_State = await DB_Get_Admin_State(env, message.from.id)
+    let admin = await DB_Get_Admin(env, message.from.id)
 
-    switch(admin_State)
+    switch(admin.UserState)
     {
       // Initial state.
       case STATE_USER_INITIAL:
 
-        // Creator -> Set Channel
+        // Admin -> Set Channel
         if(message.text === "📢 تنظیم کانال اطلاع‌رسانی")
         {
-          await Prompt_Creator_SetChannel(env, message)
-          // creator_State = STATE_CREATOR_SETTING_CHANNEL
-          await DB_Set_Admin_State(env, message.from.id, STATE_CREATOR_SETTING_CHANNEL)
+          await Prompt_Admin_SetChannel(env, message)
+          // Admin.UserState = STATE_ADMIN_SETTING_CHANNEL
+          await DB_Set_Admin_State(env, message.from.id, STATE_ADMIN_SETTING_CHANNEL)
 
           return true
         }
 
-        // Creator -> View Bot Status
+        // Admin -> View Bot Status
         if(message.text === "🤖 درباره بات")
         {
 
@@ -750,8 +763,8 @@ async function Route_PrivateChat_IsCreator(env, message)
         
         break
 
-      // Creator -> Setting Announcement Channel.
-      case STATE_CREATOR_SETTING_CHANNEL:
+      // Admin -> Setting Announcement Channel.
+      case STATE_ADMIN_SETTING_CHANNEL:
 
         // Remove Current Channel.
         if(message.text === "❌ حذف کانال تنظیم شده فعلی در صورت وجود")
@@ -759,7 +772,7 @@ async function Route_PrivateChat_IsCreator(env, message)
           // Delete channel, then re-prompt.
           await DB_Delete_AnnouncementChannel(env)
           await Prompt_RemovedAnnouncementChannelID(env, message)
-          await Prompt_Creator_SetChannel(env, message)
+          await Prompt_Admin_SetChannel(env, message)
 
           return true
         }
@@ -768,7 +781,7 @@ async function Route_PrivateChat_IsCreator(env, message)
         if(message.text === "🔙 بازگشت به منوی قبلی")
         {
           await DB_Set_Admin_State(env, message.from.id, STATE_USER_INITIAL)
-          await Prompt_Creator_MainMenu(env, message)
+          await Prompt_Admin_MainMenu(env, message)
 
           return true
         }
@@ -779,7 +792,7 @@ async function Route_PrivateChat_IsCreator(env, message)
 
         // Automatically return to main menu.
         await DB_Set_Admin_State(env, message.from.id, STATE_USER_INITIAL)
-        await Prompt_Creator_MainMenu(env, message)
+        await Prompt_Admin_MainMenu(env, message)
 
         return true
 
@@ -792,7 +805,7 @@ async function Route_PrivateChat_IsCreator(env, message)
 
 async function Route_PrivateChat_NonRegisteredUser(env, message)
 {
-  // Check if user is not the creator himself.
+  // Check if user is not the admin themselves.
   if(await IsAdmin(env, message.from.id) === true)
   {
     return false
@@ -847,7 +860,7 @@ async function Prompt_Message_BadInputCommand(env, message)
   }
 }
 
-async function Prompt_Creator_SetChannel(env, message)
+async function Prompt_Admin_SetChannel(env, message)
 {
   let channelID = await DB_Get_AnnouncementChannel(env)
 
@@ -873,10 +886,11 @@ async function Prompt_SetAnnouncementChannel(env, message, newChannelID)
   await Bot_SendTextMessage(env, message.chat.id, prompt_SetChannelID, { remove_keyboard: true })
 }
 
-async function Prompt_Creator_MainMenu(env, message)
+async function Prompt_Admin_MainMenu(env, message)
 {
-  let text_CreatorMenu = "👈 مهربد ملاکاظمی خوبده گرامی، به سامانه خوش آمدید."
-  let replyMarkup_CreatorMenu = 
+  let admin = await DB_Get_Admin(env, message.from.id)
+  let text_AdminMenu = `👈 ${admin.FullName} گرامی، به سامانه خوش آمدید.`
+  let replyMarkup_AdminMenu = 
   {
     keyboard: [
                 [{ text: '📢 تنظیم کانال اطلاع‌رسانی' }],
@@ -884,11 +898,11 @@ async function Prompt_Creator_MainMenu(env, message)
                 ],
                 resize_keyboard: true,
                 one_time_keyboard: true,
-                input_field_placeholder: "پنل سازنده",
+                input_field_placeholder: "پنل ادمین",
                 is_persistent: true
               }
           
-    await Bot_SendTextMessage(env, message.chat.id, text_CreatorMenu, replyMarkup_CreatorMenu)
+    await Bot_SendTextMessage(env, message.chat.id, text_AdminMenu, replyMarkup_AdminMenu)
 }
 
 async function Prompt_RemovedAnnouncementChannelID(env, message)
