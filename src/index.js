@@ -504,6 +504,7 @@ async function Process_CallbackQuery_Schedule(env, user, callback_query)
   }
 
   // SCH -> Admin -> Panel
+  // SCH -> Admin -> Panel
   if(tokens[1] == "ADMIN")
   {
     // Check if user is not an admin.
