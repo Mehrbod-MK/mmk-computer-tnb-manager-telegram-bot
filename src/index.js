@@ -22,6 +22,9 @@ let users = []
 const STATE_USER_INITIAL = 0
 const STATE_CREATOR_SETTING_CHANNEL = 1
 
+// STRING DEFINITIONS
+const MESSAGE_RESTRICTED_ACCESS = "⛔ شما مجاز به دسترسی به این قسمت نمی‌باشید."
+
 export default
 {
   async scheduled(event, env, ctx) {
@@ -371,6 +374,14 @@ async function DB_Check_Schedule_IsWithinDateTime(env, schedule, dateTime)
   return true
 }
 
+async function DB_Get_Schedule_Votes_Count(env, scheduleJSON, dateOfSubmissionOBJ, submissionReason, submissionResult)
+{
+  const stmt_Count_Votes = env.DB.prepare("SELECT COUNT(*) FROM CallbackQueries WHERE Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ? AND Submission_Result = ?").bind(scheduleJSON.LessonCode, scheduleJSON.PresentationCode, System_Get_Shamsi_Date_String(dateOfSubmissionOBJ), submissionReason, submissionResult)
+  const db_Count_Votes = +((await stmt_Count_Votes.raw())[0][0])
+
+  return db_Count_Votes
+}
+
 async function Bot_DB_UpdateVoteCounts_TeacherPresences(env, telegram_CallbackQuery, cbQueryDB)
 {
   const stmt_Count_OKs = env.DB.prepare("SELECT COUNT(*) FROM CallbackQueries WHERE Schedule_LessonCode = ? AND Schedule_PresentationCode = ? AND Submission_Date = ? AND Submission_Reason = ? AND Submission_Result = ?").bind(cbQueryDB.Schedule_LessonCode, cbQueryDB.Schedule_PresentationCode, cbQueryDB.Submission_Date, "Teacher Presence", "OK")
@@ -408,11 +419,11 @@ async function DB_Get_CallbackQuery_Schedule(env, userID, scheduleLessonCode, sc
   return results[0]
 }
 
-async function DB_Write_CallbackQuery_Schedule(env, user, callback_query)
+async function Process_CallbackQuery_Display(env, user, callback_query)
 {
   // Check expected tokens length.
   let tokens = callback_query.data.split('_')
-  if((tokens.length != 4) || (tokens[0] !== "SCH"))
+  if((tokens.length !== 4) || (tokens[0] !== "DISP"))
   {
     return false
   }
@@ -422,6 +433,61 @@ async function DB_Write_CallbackQuery_Schedule(env, user, callback_query)
   if(schedule === null)
   {
     return false
+  }
+
+  // Admin -> View Votes.
+  if(tokens[1] === "VOTES")
+  {
+    // Get votes count.
+    let dateTimeNow = new Date()
+    let votes_OK = await DB_Get_Schedule_Votes_Count(env, schedule, dateTimeNow, "Teacher Presence", "OK")
+    let votes_NOK = await DB_Get_Schedule_Votes_Count(env, schedule, dateTimeNow, "Teacher Presence", "NOK")
+    let votes_DELAY = await DB_Get_Schedule_Votes_Count(env, schedule, dateTimeNow, "Teacher Presence", "DELAY")
+
+    let toastText_VotesResults = `📊 گزارش حضور استاد در کلاس درس:
+  
+  👍 حضور استاد:  ${votes_OK}
+  👎 عدم حضور استاد:  ${votes_NOK}
+  ⏳ تأخیر استاد:  ${votes_DELAY}
+  
+  ➕ تعداد کل آراء:  ${votes_OK + votes_NOK + votes_DELAY}`
+
+    await Bot_AnswerCallbackQuery(env, callback_query.id, toastText_VotesResults)
+
+    return true
+  }
+
+  return false
+}
+
+async function Process_CallbackQuery_Schedule(env, user, callback_query)
+{
+  // Check expected tokens length.
+  let tokens = callback_query.data.split('_')
+  if((tokens.length !== 4) || (tokens[0] !== "SCH"))
+  {
+    return false
+  }
+
+  // Get schedule.
+  let schedule = await DB_Get_Schedule(env, tokens[2], tokens[3])
+  if(schedule === null)
+  {
+    return false
+  }
+
+  // SCH -> Admin Panel
+  if(tokens[1] == "ADMIN")
+  {
+    // Check if user is admin.
+    if(IsAdmin(env, user) === false)
+    {
+      await Bot_AnswerCallbackQuery(env, callback_query.id, MESSAGE_RESTRICTED_ACCESS)
+      return true
+    }
+
+    // Display new admin control buttons for schedule.
+    return Prompt_InlineButtons_Schedule_AdminPanel(env, callback_query, schedule)
   }
 
   // Check if schedule has arrived and the user can submit their response.
@@ -489,7 +555,14 @@ async function Process_CallbackQuery_Data(env, callback_query)
   if(cbQuery_Tokens[0] === "SCH")
   {
     // Write schedule data to DB.
-    await DB_Write_CallbackQuery_Schedule(env, cbQuery_User, callback_query)
+    return await Process_CallbackQuery_Schedule(env, cbQuery_User, callback_query)
+  }
+
+  // DISP -> Displayables.
+  else if(cbQuery_Tokens[0] === "DISP")
+  {
+    // Process display message.
+    return await Process_CallbackQuery_Display(env, cbQuery_User, callback_query)
   }
 
   return false
@@ -884,7 +957,7 @@ async function Prompt_Channel_ScheduleStartedNow(env, scheduleJSON)
 
 ⚠ <b>توجه:  مسئولیت گزارش دروغ بر عهده دانشجو خواهد بود و شخص خاطی، به کمیته انضباطی معرفی خواهد شد.</b>`*/
 
-// DR ALIMOHAMMADZADE:  New message. + REMOVE MARKUPS.
+// DR ALIMOHAMMADZADE:  New message. + CHANGE MARKUPS.
 
 let promptText_ScheduleStarted = `⭐ #اعلان
 
@@ -894,30 +967,93 @@ let promptText_ScheduleStarted = `⭐ #اعلان
 
 🏛 اتاق #${scheduleJSON.RoomName.replaceAll(' ', '_')}
 📅 روز #${scheduleJSON.LessonDayOfWeek.replaceAll(' ', '_')}
-⌚ ساعت ${scheduleJSON.LessonTimeStart} تا ${scheduleJSON.LessonTimeEnd}`
+⌚ ساعت ${scheduleJSON.LessonTimeStart} تا ${scheduleJSON.LessonTimeEnd}
 
-/*👍 = حضور استاد
+👍 = حضور استاد
 👎 = عدم حضور استاد
-⏳ = تأخیر استاد*/
+⏳ = تأخیر استاد`
 
   let replyMarkup_InlineButtons = {
     inline_keyboard: [
       [ 
-        { text: "👍 (0)", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
-        { text: "👎 (0)", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
-        { text: "⏳ (0)", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+        { text: "👍", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+        { text: "👎", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
+        { text: "⏳", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+      ],
+      [
+        { text: "💬 ثبت نظر", callback_data: `SCH_COMNT_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+      ],
+      [
+        { text: "🗝 پنل کنترل درس", callback_data: `SCH_ADMIN_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
       ]
     ]
   }
 
-
-  // DR ALIMOHAMMADZADE:  Disable callback buttons.
-  // await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
-  await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, {})
+  await Bot_SendTextMessage(env, await DB_Get_AnnouncementChannel(env), promptText_ScheduleStarted, replyMarkup_InlineButtons)
 }
 
 function System_Get_Shamsi_Date_String(gregorianDate)
 {
   let shamsiJSON = System_Get_Shamsi_JSON(gregorianDate)
   return `${shamsiJSON.shamsi_Date.format("YYYY")}-${shamsiJSON.shamsi_Date.format("MM")}-${shamsiJSON.shamsi_Date.format("DD")}`
+}
+
+async function Prompt_InlineButtons_Schedule_AdminPanel(env, callback_query, scheduleJSON)
+{
+  // Check if callback_query contains a valid message.
+  if("message" in callback_query)
+  {
+    let replyMarkup_AdminButtons = {
+      inline_keyboard: [
+        [ 
+          { text: "📊 نمایش آراء", callback_data: `DISP_VOTES_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+        ],
+        [
+          { text: "🗯 نمایش نظرات", callback_data: `DISP_COMNTS_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+        ],
+        [
+          { text: "🔙 بازگشت 🔙", callback_data: `DISP_SCH_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+        ]
+      ]
+    }
+
+    await Bot_EditMessageReplyMarkup(env, callback_query.message.chat.id, callback_query.message.message_id, replyMarkup_AdminButtons)
+    await Bot_AnswerCallbackQuery(env, callback_query.id, `نمایش پنل ادمین برای درس.\nحتما پس از اتمام کار، از دکمه بازگشت استفاده کنید.`, false)
+
+    return true
+  }
+
+  // Return FALSE on error.
+  return false
+}
+
+async function Prompt_InlineButtons_Schedule_Display(env, callback_query, scheduleJSON)
+{
+  // Check if callback_query contains a valid message.
+  if("message" in callback_query)
+    {
+      let replyMarkup_ScheduleButtons = {
+        inline_keyboard: [
+          [ 
+            { text: "👍", callback_data: `SCH_OK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }, 
+            { text: "👎", callback_data: `SCH_NOK_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` },
+            { text: "⏳", callback_data: `SCH_DELAY_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+          ],
+          [
+            { text: "💬 ثبت نظر", callback_data: `SCH_COMNT_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+          ],
+          [
+            { text: "🗝 پنل کنترل درس", callback_data: `SCH_ADMIN_${scheduleJSON.LessonCode}_${scheduleJSON.PresentationCode}` }
+          ]
+        ]
+      }
+  
+      await Bot_EditMessageReplyMarkup(env, callback_query.message.chat.id, callback_query.message.message_id, replyMarkup_AdminButtons)
+      await Bot_AnswerCallbackQuery(env, callback_query.id, `بازگشت به پنل درس.`, false)
+  
+      return true
+    }
+  
+    // Return FALSE on error.
+    return false
 }
